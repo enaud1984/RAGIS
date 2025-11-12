@@ -10,16 +10,31 @@ import os
 from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_ollama import OllamaEmbeddings
+from langchain_chroma import Chroma
 from langchain_community.chat_models import ChatOllama
-from langchain_community.document_loaders import Docx2txtLoader,DirectoryLoader, Docx2txtLoader, PyPDFLoader, UnstructuredFileLoader
+from langchain_unstructured import UnstructuredLoader
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    TextLoader,
+    Docx2txtLoader,
+    UnstructuredEmailLoader,
+    DirectoryLoader,
+    UnstructuredExcelLoader
+)
+
 import hashlib
+
+
+os.environ["UNSTRUCTURED_DISABLE_ANALYTICS"] = "true"
+os.environ["DO_NOT_TRACK"] = "true"
 # =============================
 # CONFIGURAZIONE
 # =============================
 
-DATA_DIR = "../Documenti"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.abspath(os.path.join(BASE_DIR, "../Documenti"))
+print(f"📁 Sto leggendo i file da: {DATA_DIR}")
 DB_DIR = "data/chroma_db"
 # Modello LLM per risposte (piccolo e CPU-friendly)
 LLM_MODEL = "gemma:2b"
@@ -40,7 +55,8 @@ def get_file_hash(path):
 
 def build_vector_db():
     """
-    Indicizza solo i nuovi documenti non ancora presenti nel DB.
+    Indicizza solo i nuovi documenti non ancora presenti nel DB,
+    ignorando i file non utili come .md, .csv, ecc.
     """
     print("📚 Indicizzazione incrementale in corso...")
 
@@ -51,19 +67,45 @@ def build_vector_db():
     existing_docs = vectordb.get()
     existing_hashes = {m["hash"] for m in existing_docs["metadatas"] if "hash" in m}
 
+    # 🔹 Loader intelligente per diversi formati
     def smart_loader(path):
-        if path.endswith(".pdf"):
-            return PyPDFLoader(path)
-        elif path.endswith(".docx"):
-            return Docx2txtLoader(path)
-        else:
-            return UnstructuredFileLoader(path)
+        """
+        Restituisce il loader più adatto in base all'estensione del file.
+        """
+        ext = os.path.splitext(path)[1].lower()
 
-    loader = DirectoryLoader(DATA_DIR, glob="**/*.*", loader_cls=smart_loader)
+        if ext == ".pdf":
+            return PyPDFLoader(path)
+        elif ext in (".doc", ".docx"):
+            return Docx2txtLoader(path)
+        elif ext == ".txt":
+            return TextLoader(path, encoding="utf-8")
+        elif ext == ".eml":
+            return UnstructuredEmailLoader(path)
+        elif ext in (".xls", ".xlsx"):
+            return UnstructuredExcelLoader(path)
+        else:
+            # Fallback per altri tipi di file (es. RTF, HTML)
+            return UnstructuredLoader(path)
+
+    loader = DirectoryLoader(
+        DATA_DIR,
+        glob="**/*.*",
+        loader_cls=smart_loader,
+        silent_errors=True
+    )
+
     all_docs = loader.load()
 
+    # 🔹 Filtra i file non desiderati (.md, .csv, ecc.)
+    excluded_exts = (".md", ".csv", ".png", ".jpg", ".jpeg")
+    valid_docs = [
+        d for d in all_docs
+        if not d.metadata.get("source", "").lower().endswith(excluded_exts)
+    ]
+
     new_docs = []
-    for doc in all_docs:
+    for doc in valid_docs:
         file_path = doc.metadata["source"]
         file_hash = get_file_hash(file_path)
         if file_hash not in existing_hashes:
@@ -80,9 +122,8 @@ def build_vector_db():
     vectordb.add_documents(chunks)
     vectordb.persist()
 
-    print(f"✅ Indicizzati {len(new_docs)} nuovi documenti.")
-    return {"message": f"Indicizzati {len(new_docs)} nuovi documenti."}
-
+    print(f"✅ Indicizzati {len(new_docs)} nuovi documenti validi.")
+    return {"message": f"Indicizzati {len(new_docs)} nuovi documenti validi."}
 
 
 def get_vector_db():
@@ -156,6 +197,14 @@ def reindex():
         return {"message": "Indicizzazione completata con successo."}
     except Exception as e:
         return {"error": str(e)}
+
+@app.get("/debug_db/")
+def debug_db():
+    vectordb = get_vector_db()
+    all_data = vectordb.get()
+    num_docs = len(all_data["ids"])
+    print(f"📊 Documenti totali nel DB: {num_docs}")
+    return {"documenti": num_docs, "metadati": all_data["metadatas"][:3]}
 
 
 @app.get("/")
