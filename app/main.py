@@ -5,7 +5,7 @@
 # pip install fastapi uvicorn langchain chromadb unstructured pdfminer.six python-docx
 # ollama pull llama3
 # ==========================================
-
+import glob
 import os
 from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +35,7 @@ os.environ["DO_NOT_TRACK"] = "true"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.abspath(os.path.join(BASE_DIR, "../Documenti"))
 print(f"📁 Sto leggendo i file da: {DATA_DIR}")
-DB_DIR = "data/chroma_db"
+DB_DIR = os.path.join(BASE_DIR, "data", "chroma_db")
 # Modello LLM per risposte (piccolo e CPU-friendly)
 LLM_MODEL = "gemma:2b"
 
@@ -44,7 +44,7 @@ EMBED_MODEL = "nomic-embed-text"
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(DB_DIR, exist_ok=True)
-
+EMBEDDINGS = OllamaEmbeddings(model=EMBED_MODEL)
 # =============================
 # FUNZIONI RAG
 # =============================
@@ -53,6 +53,42 @@ def get_file_hash(path):
     with open(path, "rb") as f:
         return hashlib.md5(f.read()).hexdigest()
 
+def smart_loader(path: str):
+    ext = os.path.splitext(path)[1].lower()
+
+    if ext == ".pdf":
+        return PyPDFLoader(path)
+    elif ext in (".doc", ".docx"):
+        return Docx2txtLoader(path)
+    elif ext == ".txt":
+        return TextLoader(path, encoding="utf-8")
+    elif ext == ".eml":
+        return UnstructuredEmailLoader(path)
+    elif ext in (".xls", ".xlsx"):
+        return UnstructuredExcelLoader(path)
+    else:
+        return UnstructuredLoader(path)
+
+
+def load_all_documents(base_dir: str):
+    """
+    Sostituisce DirectoryLoader con gestione dinamica del loader.
+    """
+    docs = []
+    excluded_exts = (".md", ".csv", ".png", ".jpg", ".jpeg")
+
+    for path in glob.glob(os.path.join(base_dir, "**/*.*"), recursive=True):
+        if path.lower().endswith(excluded_exts):
+            continue
+        try:
+            loader = smart_loader(path)
+            subdocs = loader.load()
+            docs.extend(subdocs)
+            print(f"📄 Caricato: {os.path.basename(path)} ({len(subdocs)} parti)")
+        except Exception as e:
+            print(f"⚠️ Errore caricando {path}: {e}")
+    return docs
+
 def build_vector_db():
     """
     Indicizza solo i nuovi documenti non ancora presenti nel DB,
@@ -60,42 +96,13 @@ def build_vector_db():
     """
     print("📚 Indicizzazione incrementale in corso...")
 
-    embeddings = OllamaEmbeddings(model=EMBED_MODEL)
-    vectordb = Chroma(persist_directory=DB_DIR, embedding_function=embeddings)
+    vectordb = Chroma(persist_directory=DB_DIR, embedding_function=EMBEDDINGS)
 
     # Recupera file già indicizzati (metadati)
     existing_docs = vectordb.get()
     existing_hashes = {m["hash"] for m in existing_docs["metadatas"] if "hash" in m}
 
-    # 🔹 Loader intelligente per diversi formati
-    def smart_loader(path):
-        """
-        Restituisce il loader più adatto in base all'estensione del file.
-        """
-        ext = os.path.splitext(path)[1].lower()
-
-        if ext == ".pdf":
-            return PyPDFLoader(path)
-        elif ext in (".doc", ".docx"):
-            return Docx2txtLoader(path)
-        elif ext == ".txt":
-            return TextLoader(path, encoding="utf-8")
-        elif ext == ".eml":
-            return UnstructuredEmailLoader(path)
-        elif ext in (".xls", ".xlsx"):
-            return UnstructuredExcelLoader(path)
-        else:
-            # Fallback per altri tipi di file (es. RTF, HTML)
-            return UnstructuredLoader(path)
-
-    loader = DirectoryLoader(
-        DATA_DIR,
-        glob="**/*.*",
-        loader_cls=smart_loader,
-        silent_errors=True
-    )
-
-    all_docs = loader.load()
+    all_docs = load_all_documents(DATA_DIR)
 
     # 🔹 Filtra i file non desiderati (.md, .csv, ecc.)
     excluded_exts = (".md", ".csv", ".png", ".jpg", ".jpeg")
@@ -127,11 +134,8 @@ def build_vector_db():
 
 
 def get_vector_db():
-    """
-    Carica il database vettoriale esistente.
-    """
-    embeddings = OllamaEmbeddings(model=EMBED_MODEL)
-    vectordb = Chroma(persist_directory=DB_DIR, embedding_function=embeddings)
+    print(f"🧭 Carico il DB da: {DB_DIR}")
+    vectordb = Chroma(persist_directory=DB_DIR, embedding_function=EMBEDDINGS)
     return vectordb
 
 
@@ -140,7 +144,8 @@ def query_rag(question: str):
     Esegue la ricerca semantica e genera la risposta tramite LLM (Ollama).
     """
     vectordb = get_vector_db()
-    results = vectordb.similarity_search(question, k=3)
+    results = vectordb.similarity_search(question, k=10)
+    print(results)
     print(f"🔍 Trovati {len(results)} documenti rilevanti")
     context = "\n\n".join([doc.page_content for doc in results])
 
