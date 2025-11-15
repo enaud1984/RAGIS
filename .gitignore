@@ -1,3 +1,9 @@
 .venv
 /data/chroma_db/
 /data/
+pycache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.idea
