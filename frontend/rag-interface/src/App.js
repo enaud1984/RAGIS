@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import "./App.css";
 
 const API_BASE = "http://127.0.0.1:8000";
@@ -10,6 +10,7 @@ function App() {
     { sender: "system", text: "Benvenuto nella chat RAG!" },
   ]);
   const [statusMessage, setStatusMessage] = useState("");
+  const textareaRef = useRef(null);
 
   const handleCheckboxChange = (e) => {
     const { name, checked } = e.target;
@@ -84,43 +85,54 @@ function App() {
     }
   };
 
+  // Funzione per regolare altezza dinamica del textarea
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = "auto";
+      const maxHeight = 3 * 24 + 12; // 3 righe * line-height + padding
+      el.style.height = Math.min(el.scrollHeight, maxHeight) + "px";
+    }
+  }, [promptUtente]);
+
   return (
     <div className="container">
       {/* Sidebar */}
       <aside className="sidebar">
-        <div className="logo">LOGO</div>
-        <div className="search-options">
-          <label>
-            <input
-              type="checkbox"
-              name="local"
-              checked={searchMode.local}
-              onChange={handleCheckboxChange}
-            />
-            Ricerca - Solo locale
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              name="online"
-              checked={searchMode.online}
-              onChange={handleCheckboxChange}
-            />
-            Ricerca - Locale + Online
-          </label>
-        </div>
-        <div className="chat-log">LOG vecchie chat</div>
+  <div className="top-section">
+    <div className="logo">
+  <img src="/ragis-logo.png" className="logo-img" />
+</div>
 
+
+    <div className="search-options">
+      <label>
         <input
-          type="file"
-          onChange={handleUploadDocument}
-          style={{ marginBottom: "10px" }}
+          type="checkbox"
+          name="local"
+          checked={searchMode.local}
+          onChange={handleCheckboxChange}
         />
-        <button onClick={handleReindex}>Ricostruisci DB</button>
-        <button onClick={handleDebugDB}>Debug DB</button>
+        Ricerca - Solo locale
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          name="online"
+          checked={searchMode.online}
+          onChange={handleCheckboxChange}
+        />
+        Ricerca - Locale + Online
+      </label>
+    </div>
+  </div>
 
-        <div className="account">Account Loggato</div>
-      </aside>
+  <div className="bottom-section">
+    <button onClick={handleReindex}>Ricostruisci DB</button>
+    <div className="account">Account Loggato</div>
+  </div>
+</aside>
+
 
       {/* Main content */}
       <main className="main">
@@ -140,13 +152,31 @@ function App() {
         </div>
 
         {/* Prompt utente in basso */}
-        <div className="prompt-utente">
-          <textarea
-            value={promptUtente}
-            onChange={(e) => setPromptUtente(e.target.value)}
-            placeholder="Scrivi il tuo messaggio..."
-          />
-          <button onClick={handleSendPrompt}>Invia</button>
+        <div className="prompt-wrapper">
+          <div className="input-container">
+            <label htmlFor="file-upload" className="icon-button">+</label>
+            <input
+              id="file-upload"
+              type="file"
+              onChange={handleUploadDocument}
+              style={{ display: "none" }}
+            />
+            <textarea
+              ref={textareaRef}
+              className="chat-input"
+              value={promptUtente}
+              onChange={(e) => setPromptUtente(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendPrompt();
+                }
+              }}
+              placeholder="Scrivi il tuo messaggio..."
+              rows={1}
+            />
+            <button className="icon-button send" onClick={handleSendPrompt}>Invia</button>
+          </div>
         </div>
 
         <footer className="footer">AI system rilasciato da RAGIS group</footer>

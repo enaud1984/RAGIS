@@ -14,20 +14,40 @@ body {
 .sidebar {
   width: 260px;
   background-color: #11131F;
-  padding: 20px;
+  padding: 10px 20px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+  justify-content: space-between; /* distribuisce alto e basso */
   border-right: 1px solid #1F2233;
 }
 
-.logo {
-  font-size: 24px;
-  font-weight: bold;
-  color: #fff;
-  text-align: center;
-  margin-bottom: 20px;
+.top-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
+
+.bottom-section {
+  display: flex;
+  flex-direction: column;
+  gap: 50px;
+}
+
+
+.logo-img {
+  max-width: 200px;
+  height: 80px;
+  display: block;
+  object-fit: contain;
+  margin-top: 0;
+  margin-bottom: 0;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0; /* ridotto lo spazio verticale */
+}
+
+
 
 .search-options label {
   display: flex;
@@ -73,6 +93,19 @@ button:hover {
   flex-direction: column;
   gap: 10px;
 }
+.chat-area::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-area::-webkit-scrollbar-track {
+  background: #1A1C29;
+}
+
+.chat-area::-webkit-scrollbar-thumb {
+  background-color: #9B4DFF;
+  border-radius: 3px;
+}
+
 
 .chat-messages {
   display: flex;
@@ -103,31 +136,123 @@ button:hover {
 /* Prompt in basso */
 .prompt-utente {
   display: flex;
+  align-items: center;
   gap: 10px;
+  padding: 10px;
+  border-top: 1px solid #1F2233;
+  background-color: #11131F;
+}
+
+.upload-button {
+  font-size: 24px;
+  color: #FF4D8D;
+  cursor: pointer;
+  padding: 0 10px;
+  user-select: none;
+}
+
+/* Prompt in basso */
+.prompt-wrapper {
   padding: 15px;
   border-top: 1px solid #1F2233;
   background-color: #11131F;
 }
 
-.prompt-utente textarea {
-  flex: 1;
-  resize: none;
-  height: 60px;
-  padding: 12px;
-  font-size: 14px;
+.input-container {
+  display: flex;
+  align-items: center;
   background-color: #1A1C29;
-  color: #fff;
   border: 1px solid #333;
+  border-radius: 10px;
+  padding: 8px 12px;
+  gap: 10px;
+}
+
+.chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  line-height: 20px;     /* altezza di riga */
+  padding: 10px 0;       /* somma top+bottom = 20px -> centrato in ~40px di altezza */
+  resize: none;
+  outline: none;
+  max-height: calc(20px * 3 + 20px); /* 3 righe + padding totale */
+  overflow-y: auto;
+  margin: 0;
+}
+.search-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.search-options label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #EAEAEA;
+  background-color: #1A1C29;
+  padding: 8px 12px;
   border-radius: 8px;
+  border: 1px solid #333;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
-.prompt-utente textarea::placeholder {
+.search-options label:hover {
+  background-color: #222533;
+}
+
+.search-options input[type="checkbox"] {
+  accent-color: #FF4D8D;
+  width: 16px;
+  height: 16px;
+}
+
+
+/* Scrollbar personalizzata */
+.chat-input::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-input::-webkit-scrollbar-track {
+  background: #1A1C29;
+}
+
+.chat-input::-webkit-scrollbar-thumb {
+  background-color: #817394;
+  border-radius: 3px;
+}
+
+.chat-input::placeholder {
   color: #888;
+  opacity: 1;
 }
 
-.prompt-utente button {
-  min-width: 100px;
+.icon-button {
+  background: none;
+  border: none;
+  color: #FF4D8D;
+  font-size: 20px;
+  cursor: pointer;
+  user-select: none;
+  padding: 0 8px;
 }
+
+.icon-button.send {
+  color: #fff;
+  background: linear-gradient(90deg, #FF4D8D, #9B4DFF);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+
+
 
 /* Footer */
 .footer {
