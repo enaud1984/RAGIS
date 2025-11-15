@@ -1,2 +1,3 @@
 .venv
-/frontend/rag-interface/src/src/npm.lnk
+/data/chroma_db/
+/data/
