@@ -4,12 +4,9 @@ import sys
 from pathlib import Path
 
 
-
 class RagLog:
     """
     Logger riutilizzabile con rotazione giornaliera.
-    Rotazione ogni mezzanotte, mantenendo backupCount file precedenti.
-
     Formato log:
     timestamp - funzione - livello - messaggio
     """
@@ -20,14 +17,14 @@ class RagLog:
     def get_logger(name: str,
                    log_dir: str = "logs",
                    log_file: str = "app.log",
-                   level=logging.INFO,
                    backup_count: int = 7
                    ) -> logging.Logger:
+
+        level = logging.INFO  # SOLO INFO+ERROR+CRITICAL
 
         # Crea cartella log se non esiste
         log_dir_path = Path(log_dir)
         log_dir_path.mkdir(parents=True, exist_ok=True)
-
         full_log_path = log_dir_path / log_file
 
         logger = logging.getLogger(name)
@@ -35,26 +32,30 @@ class RagLog:
 
         if not RagLog._handlers_initialized:
 
-            # Formato uniforme
+            # Formato base
             log_format = "%(asctime)s - %(funcName)s - %(levelname)s - %(message)s"
             formatter = logging.Formatter(log_format)
 
-            # --- Rotazione giornaliera ---
+            # Rotazione giornaliera
             rotating_handler = TimedRotatingFileHandler(
                 filename=str(full_log_path),
-                when="midnight",      # ruota ogni giorno
-                interval=1,
+                when="midnight",
                 backupCount=backup_count,
                 encoding="utf-8",
-                utc=False
             )
+            rotating_handler.setLevel(level)        # SOLO INFO+
             rotating_handler.setFormatter(formatter)
-            logger.addHandler(rotating_handler)
 
-            # --- Console handler ---
+            # Console handler
             console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(level)         # SOLO INFO+
             console_handler.setFormatter(formatter)
-            logger.addHandler(console_handler)
+
+            # Attacco gli handler al LOG ROOT
+            root = logging.getLogger()
+            root.setLevel(level)
+            root.addHandler(rotating_handler)
+            root.addHandler(console_handler)
 
             RagLog._handlers_initialized = True
 

@@ -30,7 +30,7 @@ def load_all_documents(base_dir: Path) -> List:
             docs.extend(subdocs)
             log.info("Caricato %s (%d parti)", path.name, len(subdocs))
         except Exception as e:
-            log.warning("Errore caricando %s: %s", path, e)
+            log.error("Errore caricando %s: %s", path, e)
     return docs
 
 def smart_loader(path: Path):
