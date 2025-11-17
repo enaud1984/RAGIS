@@ -8,3 +8,4 @@ langchain-huggingface>=0.0.6
 langchain-ollama>=0.1.0
 langchain-text-splitters>=0.0.3
 langchain-unstructured>=0.0.2
+python-multipart
