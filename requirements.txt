@@ -10,3 +10,7 @@ langchain-text-splitters>=0.0.3
 langchain-unstructured>=0.0.2
 python-multipart
 sentence-transformers
+unstructured
+pandas
+python-docx
+msoffcrypto-tool
