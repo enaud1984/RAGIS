@@ -1,0 +1,74 @@
+from typing import Tuple
+
+from langchain_ollama import ChatOllama
+
+from parameter import *
+from rag.embeddings import get_vector_db
+from logger_ragis.rag_log import RagLog
+
+log = RagLog.get_logger("rag_query")
+
+def decide_from_db(prompt: str, threshold: float = 0.7, top_k: int = 10) -> Tuple[bool, str]:
+    vectordb = get_vector_db()
+
+    # 1) Prompt troppo breve → niente RAG
+    if len(prompt.split()) < 4:
+        return False, "Prompt troppo breve per una ricerca affidabile."
+
+    # 2) Threshold dinamico
+    if len(prompt.split()) < 6:
+        threshold = min(threshold, 0.35)
+
+    results = vectordb.similarity_search_with_score(prompt, k=top_k)
+    if not results:
+        return False, "DB vuoto o nessun match."
+
+    # Ordina per distanza
+    results.sort(key=lambda x: x[1])
+
+    # 3) Richiedi almeno 2 match forti
+    close_matches = [(doc, dist) for doc, dist in results if dist <= threshold]
+
+    if len(close_matches) < 2:
+        return False, "Match insufficienti per usare il RAG."
+
+    return True, "Match soddisfacenti nei documenti."
+
+
+def query_rag(question: str, top_k: int = TOP_K, distance_threshold: float = DISTANCE_THRESHOLD) -> Tuple[str, List[Dict[str, str]]]:
+    log.info("Prompt: %s", question)
+    vectordb = get_vector_db()
+    results = vectordb.similarity_search_with_score(question, k=top_k)
+    if not results:
+        raise RuntimeError("Nessun risultato dalla ricerca vettoriale.")
+
+    # filtra e ordina
+    results = sorted(results, key=lambda x: x[1])
+    filtered = [(doc, dist) for (doc, dist) in results if dist <= distance_threshold]
+
+    if not filtered:
+        return "", []
+
+    # costruisco contesto limitato (es. primi 5 chunk)
+    max_chunks = 5
+    context_parts = []
+    sources = []
+    for i, (doc, dist) in enumerate(filtered[:max_chunks]):
+        snippet = doc.page_content
+        context_parts.append(f"Fonte: {doc.metadata.get('source')} (distanza: {dist:.3f})\n{snippet}")
+        sources.append({"source": doc.metadata.get("source"), "distance": f"{dist:.3f}", "chunk_index": str(doc.metadata.get("chunk_index", "-"))})
+
+    context = "\n\n---\n\n".join(context_parts)
+
+    system_prompt = (
+        """Sei un assistente legale italiano, cordiale ed educato. Usa solo le informazioni presenti nel contesto per formulare la risposta. 
+        Se non c'è abbastanza informazione indica chiaramente che non è possibile rispondere e suggerisci cosa fornire."""
+    )
+
+    full_prompt = f"{system_prompt}CONTESTO:\n{context}\n\nDOMANDA:\n{question}\n\nRisposta concisa e puntuale:"
+
+    llm = ChatOllama(model=LLM_MODEL, temperature=0)
+    resp = llm.invoke(full_prompt)
+    answer_text = getattr(resp, "content", str(resp))
+
+    return answer_text, sources
