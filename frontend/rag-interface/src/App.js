@@ -94,7 +94,7 @@ function App() {
       el.style.height = Math.min(el.scrollHeight, maxHeight) + "px";
     }
   }, [promptUtente]);
-
+ 
   return (
     <div className="container">
       {/* Sidebar */}
