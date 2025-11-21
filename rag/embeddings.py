@@ -1,18 +1,21 @@
-
-
 from logger_ragis.rag_log import RagLog
 from functools import lru_cache
-from parameter import *
+from settings import *
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 
 log = RagLog.get_logger("embedding")
 # --------- Singleton factories for embeddings & vectordb ----------
-@lru_cache(maxsize=1)
-def get_embeddings():
-    log.info("Inizializzo embeddings: %s", EMBED_MODEL)
-    return HuggingFaceEmbeddings(model_name=EMBED_MODEL)
+@lru_cache(maxsize=10)
+def load_embedding_model(model_name: str):
+    """Carica un modello HuggingFace e lo cache-a per nome."""
+    log.info(f"Inizializzo embedding model: {model_name}")
+    return HuggingFaceEmbeddings(model_name=model_name)
 
+def get_embeddings():
+    params = resolve_params()
+    model_name = params["embed_model"]
+    return load_embedding_model(model_name)
 
 @lru_cache(maxsize=1)
 def get_vector_db():

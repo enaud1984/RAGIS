@@ -22,15 +22,20 @@ from contextlib import asynccontextmanager
 import aiocron
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+
+from database.parameter_db import ParameterDB
 from logger_ragis.rag_log import RagLog
 from fastapi import FastAPI, Body, HTTPException, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from parameter import *
+from settings import *
 from rag.embeddings import get_vector_db
 from rag.indexing import build_vector_db
 from rag.rag_query import decide_from_db, query_rag
 
+from database.migration import run_migrations
+
 log = RagLog.get_logger("Ragis")
+
 
 async def reindex_notturno(app_: FastAPI):
     """
@@ -69,7 +74,6 @@ async def lifespan(app_: FastAPI):
 
 app = FastAPI(title="RAG Server", lifespan=lifespan)
 
-
 app.add_middleware(CORSMiddleware,
                    allow_origins=["*"],
                    allow_methods=["*"],
@@ -96,15 +100,23 @@ async def chat(request:Request, body: ChatRequest = Body(...)):
             "testo": "Il sistema sta aggiornando il database. "
                         "Riprova tra qualche minuto."}
 
+    params = resolve_params()
+    top_k= body.top_k if body.top_k is not None else params["top_k"]
+    distance_threshold = (
+        body.distance_threshold
+        if body.distance_threshold is not None
+        else params["distance_threshold"]
+    )
+
     if not body.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt vuoto")
 
-    match, msg = decide_from_db(body.prompt, threshold=body.distance_threshold or DISTANCE_THRESHOLD, top_k=body.top_k or TOP_K)
+    match, msg = decide_from_db(body.prompt, threshold=body.distance_threshold or distance_threshold, top_k=body.top_k or top_k)
     if not match:
         return ChatResponse(answer="Non ho trovato informazioni rilevanti nei documenti.", sources=[])
 
     try:
-        answer, sources = query_rag(body.prompt, top_k=body.top_k or TOP_K, distance_threshold=body.distance_threshold or DISTANCE_THRESHOLD)
+        answer, sources = query_rag(body.prompt, top_k=body.top_k or top_k, distance_threshold=body.distance_threshold or distance_threshold)
         if not answer:
             return ChatResponse(answer="Non ho abbastanza informazioni nei documenti per rispondere. Specifica contesto o carica documenti.", sources=sources)
         return ChatResponse(answer=answer, sources=sources)
@@ -139,6 +151,8 @@ async def debug_db():
 @app.post("/upload/", tags=["admin"])
 async def upload_files(request: Request, files: list[UploadFile] = File(...)):
     saved_files = []
+    params = resolve_params()
+    data_dir = params["data_dir"]
     if request.app.state.reindexing:
         return {
             "reindex":True,
@@ -146,18 +160,29 @@ async def upload_files(request: Request, files: list[UploadFile] = File(...)):
                         "Riprova tra qualche minuto."}
 
     for file in files:
-        dest_path = Path(DATA_DIR) / file.filename
+        dest_path = Path(data_dir) / file.filename
         with open(dest_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         saved_files.append(file.filename)
         log.info(f"File caricato: {dest_path}")
 
     return {
-        "message": "Upload completato.",
-        "files_saved": saved_files
+        "messagio": "Upload completato.",
+        "files_salvati": saved_files
     }
 
 if __name__ == "__main__":
     import uvicorn
+    run_migrations()  # Esegue creazione DB
+    parameter_db = ParameterDB()
+    parameter_db.set("llm_model", "mistral", descrizione="Modello LLM da utilizzare")
+    parameter_db.set("embed_model", "intfloat/e5-large-v2", descrizione="Modello di embedding da utilizzare")
+    parameter_db.set("chunk_size", 1500, tipo="number", descrizione="Dimensione chunk documenti")
+    parameter_db.set("chunk_overlap", 200, tipo="number",descrizione="Overlap chunk")
+    parameter_db.set("top_k", 8, tipo="number", descrizione="Top K chunk")
+    parameter_db.set("distance_threshold", 0.6, tipo="decimale",descrizione="Soglia di similarità")
+    parameter_db.set("EXCLUDED_EXTS",".md, .csv, .png, .jpg, .jpeg", tipo="tupla",descrizione="Cartella documenti")
+    parameter_db.set("DATA_DIR","Documenti", tipo="string",descrizione="Cartella documenti")
+
     log.info("Avvio server uvicorn su 0.0.0.0:8000")
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

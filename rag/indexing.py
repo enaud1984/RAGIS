@@ -3,7 +3,7 @@ from typing import Dict
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from logger_ragis.rag_log import RagLog
-from parameter import *
+from settings import *
 from rag.embeddings import get_vector_db
 from rag.loaders import load_all_documents, get_file_hash
 
@@ -11,7 +11,12 @@ log = RagLog.get_logger("indexing")
 # --------- Indicizzazione incrementale ----------
 def build_vector_db() -> Dict[str, str]:
     log.info("Start indicizzazione incrementale...")
+    params = resolve_params()
+    excluded_exts = params["excluded_exts"]
     vectordb = get_vector_db()
+    data_dir = params["data_dir"]
+    chunk_overlap=params["chunk_overlap"]
+    chunk_size=params["chunk_size"]
 
     # recupera metadati esistenti per dedup basata su hash
     try:
@@ -20,8 +25,8 @@ def build_vector_db() -> Dict[str, str]:
         existing = {}
     existing_hashes = set(m.get("hash") for m in existing.get("metadatas", []) if m.get("hash"))
 
-    all_docs = load_all_documents(DATA_DIR)
-    valid_docs = [d for d in all_docs if not d.metadata.get("source", "").lower().endswith(EXCLUDED_EXTS)]
+    all_docs = load_all_documents(data_dir)
+    valid_docs = [d for d in all_docs if not d.metadata.get("source", "").lower().endswith(excluded_exts)]
 
     new_docs = []
     for doc in valid_docs:
@@ -38,7 +43,7 @@ def build_vector_db() -> Dict[str, str]:
         log.info("Nessun nuovo documento da indicizzare.")
         return {"message": "Nessun nuovo documento."}
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     chunks = splitter.split_documents(new_docs)
 
     ids = []
