@@ -158,7 +158,7 @@ def save_parameters(body,payload: dict = Depends(validate_token) ):
 
 
 @app.post("/login")
-def login(body):
+def login(body:LoginRequest):
     conn = DBConnection()
     cur = conn.cursor()
 
@@ -184,8 +184,8 @@ def login(body):
     }
 
 
-@app.post("/regitrazione", tags=["admin"])
-def register(body,payload: dict = Depends(validate_token) ):
+@app.post("/registrazione", tags=["admin"])
+def register(body:UserRequest,payload: dict = Depends(validate_token) ):
     conn = DBConnection()
     cur = conn.cursor()
 

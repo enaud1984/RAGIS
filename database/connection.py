@@ -20,4 +20,8 @@ class DBConnection:
         if not db_path.parent.exists():
             db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.conn = sqlite3.connect(db_path)
+        self.conn = sqlite3.connect(db_path,check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+
+    def cursor(self):
+        return self.conn.cursor()

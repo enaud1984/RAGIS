@@ -19,6 +19,14 @@ TOP_K = int(os.environ.get("TOP_K", 8))
 DISTANCE_THRESHOLD = float(os.environ.get("DISTANCE_THRESHOLD", 0.6))
 EXCLUDED_EXTS = (".md", ".csv", ".png", ".jpg", ".jpeg")
 """
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class UserRequest(BaseModel):
+    username: str
+    password: str
+    ruolo:str
 
 class ChatRequest(BaseModel):
     prompt: str
