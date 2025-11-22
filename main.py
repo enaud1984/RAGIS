@@ -58,9 +58,10 @@ async def reindex_notturno(app_: FastAPI):
 @asynccontextmanager
 async def lifespan(app_: FastAPI):
     app_.state.reindexing = False
-
+    params = resolve_params()
     # Salvi il job nella app state
-    cron_job = aiocron.crontab("0 3 * * *", func=reindex_notturno, args=(app_,))
+    cron_reindex=params["cron_reindex"]
+    cron_job = aiocron.crontab(cron_reindex, func=reindex_notturno, args=(app_,))
     app_.state.cron_job = cron_job
 
     log.info("Reindex giornaliero programmato alle 03:00")
@@ -174,7 +175,7 @@ async def upload_files(request: Request, files: list[UploadFile] = File(...)):
 if __name__ == "__main__":
     import uvicorn
     run_migrations()  # Esegue creazione DB
-    """
+    """solo una volta per inserire i parametri altrimenti manualmente
     parameter_db = ParameterDB()
     parameter_db.set("llm_model", "mistral", descrizione="Modello LLM da utilizzare")
     parameter_db.set("embed_model", "intfloat/e5-large-v2", descrizione="Modello di embedding da utilizzare")

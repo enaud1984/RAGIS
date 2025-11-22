@@ -47,9 +47,10 @@ def resolve_params():
     params["excluded_exts"] = tuple(
         ext.strip() for ext in excluded_str.split(",") if ext.strip()
     )
-
+    params["cron_reindex"] = db.get("cron_reindex", "0 3 * * *")  # Default: ogni giorno alle 3 AM
     data_dir = Path(db.get("DATA_DIR", "Documenti")).resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     params["data_dir"] = data_dir
+
 
     return params
