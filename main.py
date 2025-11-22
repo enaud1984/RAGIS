@@ -129,7 +129,7 @@ async def chat(request:Request, body: ChatRequest = Body(...), payload: dict = D
 
 
 @app.get("/reindex/", tags=["admin"])
-def reindex():
+def reindex(payload: dict = Depends(validate_token) ):
     try:
         result = build_vector_db()
         return {"message": result.get("message", "OK")}
@@ -150,12 +150,19 @@ async def debug_db():
         log.exception("Errore debug DB")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/save_parameters",tags=["admin"])
+def save_parameters(body,payload: dict = Depends(validate_token) ):
+    for key, value in body.items():
+        parameter_db = ParameterDB()
+        parameter_db.set(key, value)
+
+
 @app.post("/login")
-def login(username: str, password: str):
+def login(body):
     conn = DBConnection()
     cur = conn.cursor()
 
-    cur.execute("SELECT * FROM users WHERE username = ?", (username,))
+    cur.execute("SELECT * FROM users WHERE username = ?", (body.username,))
     row = cur.fetchone()
 
     if not row:
@@ -163,32 +170,32 @@ def login(username: str, password: str):
 
     stored_hash = row["password_hash"]
 
-    if not verify_password(password, stored_hash):
+    if not verify_password(body.password, stored_hash):
         raise HTTPException(status_code=401, detail="Credenziali non valide")
 
     ruolo = row["ruolo"]
 
-    token = create_jwt(username, ruolo)
+    token = create_jwt(body.username, ruolo)
 
     return {
         "token": token,
-        "username": username,
+        "username": body.username,
         "ruolo": ruolo
     }
 
 
 @app.post("/regitrazione", tags=["admin"])
-def register(username: str, password: str, ruolo: str = "user"):
+def register(body,payload: dict = Depends(validate_token) ):
     conn = DBConnection()
     cur = conn.cursor()
 
-    hashed = hash_password(password)
+    hashed = hash_password(body.password)
 
     try:
         cur.execute("""
             INSERT INTO users (username, password_hash, ruolo)
             VALUES (?, ?, ?)
-        """, (username, hashed, ruolo))
+        """, (body.username, hashed, body.ruolo))
 
         conn.commit()
 
