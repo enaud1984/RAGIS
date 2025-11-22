@@ -23,9 +23,11 @@ import aiocron
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
+from auth import hash_password, verify_password, create_jwt, validate_token
+from database.connection import DBConnection
 from database.parameter_db import ParameterDB
 from logger_ragis.rag_log import RagLog
-from fastapi import FastAPI, Body, HTTPException, Request, UploadFile, File
+from fastapi import FastAPI, Body, HTTPException, Request, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from settings import *
 from rag.embeddings import get_vector_db
@@ -94,7 +96,7 @@ def serve_frontend():
 
 
 @app.post("/chat/", response_model=ChatResponse, tags=["chat"])
-async def chat(request:Request, body: ChatRequest = Body(...)):
+async def chat(request:Request, body: ChatRequest = Body(...), payload: dict = Depends(validate_token) ):
     if request.app.state.reindexing:
         return {
             "reindex":True,
@@ -148,9 +150,56 @@ async def debug_db():
         log.exception("Errore debug DB")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/login")
+def login(username: str, password: str):
+    conn = DBConnection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT * FROM users WHERE username = ?", (username,))
+    row = cur.fetchone()
+
+    if not row:
+        raise HTTPException(status_code=401, detail="Credenziali non valide")
+
+    stored_hash = row["password_hash"]
+
+    if not verify_password(password, stored_hash):
+        raise HTTPException(status_code=401, detail="Credenziali non valide")
+
+    ruolo = row["ruolo"]
+
+    token = create_jwt(username, ruolo)
+
+    return {
+        "token": token,
+        "username": username,
+        "ruolo": ruolo
+    }
+
+
+@app.post("/regitrazione", tags=["admin"])
+def register(username: str, password: str, ruolo: str = "user"):
+    conn = DBConnection()
+    cur = conn.cursor()
+
+    hashed = hash_password(password)
+
+    try:
+        cur.execute("""
+            INSERT INTO users (username, password_hash, ruolo)
+            VALUES (?, ?, ?)
+        """, (username, hashed, ruolo))
+
+        conn.commit()
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Username già esistente")
+
+    return {"messaggio": "Registrazione completata"}
+
 
 @app.post("/upload/", tags=["admin"])
-async def upload_files(request: Request, files: list[UploadFile] = File(...)):
+async def upload_files(request: Request, files: list[UploadFile] = File(...),payload: dict = Depends(validate_token)):
     saved_files = []
     params = resolve_params()
     data_dir = params["data_dir"]
