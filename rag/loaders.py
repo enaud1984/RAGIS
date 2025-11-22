@@ -9,7 +9,7 @@ from langchain_community.document_loaders import (PyPDFLoader,
                                                   UnstructuredWordDocumentLoader)
 from langchain_unstructured import UnstructuredLoader
 
-from parameter import *
+from settings import *
 from logger_ragis.rag_log import RagLog
 
 
@@ -18,9 +18,11 @@ log = RagLog.get_logger("loaders")
 def load_all_documents(base_dir: Path) -> List:
     """Carica tutti i documenti utili alla indicizzazione."""
     docs = []
+    params = resolve_params()
+    excluded_exts = params["excluded_exts"]
     for path_str in glob.glob(str(base_dir / "**" / "*.*"), recursive=True):
         path = Path(path_str)
-        if path.suffix.lower() in EXCLUDED_EXTS:
+        if path.suffix.lower() in excluded_exts:
             continue
         try:
             loader = smart_loader(path)

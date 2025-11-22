@@ -2,7 +2,7 @@ from typing import Tuple
 
 from langchain_ollama import ChatOllama
 
-from parameter import *
+from settings import *
 from rag.embeddings import get_vector_db
 from logger_ragis.rag_log import RagLog
 
@@ -35,8 +35,14 @@ def decide_from_db(prompt: str, threshold: float = 0.7, top_k: int = 10) -> Tupl
     return True, "Match soddisfacenti nei documenti."
 
 
-def query_rag(question: str, top_k: int = TOP_K, distance_threshold: float = DISTANCE_THRESHOLD) -> Tuple[str, List[Dict[str, str]]]:
+def query_rag(question: str, top_k: int = None, distance_threshold: float = None) -> Tuple[str, List[Dict[str, str]]]:
     log.info("Prompt: %s", question)
+    params = resolve_params()
+
+    top_k = top_k or params["top_k"]
+    distance_threshold = distance_threshold or params["distance_threshold"]
+    llm_model = params["llm_model"]
+
     vectordb = get_vector_db()
     results = vectordb.similarity_search_with_score(question, k=top_k)
     if not results:
@@ -67,7 +73,7 @@ def query_rag(question: str, top_k: int = TOP_K, distance_threshold: float = DIS
 
     full_prompt = f"{system_prompt}CONTESTO:\n{context}\n\nDOMANDA:\n{question}\n\nRisposta concisa e puntuale:"
 
-    llm = ChatOllama(model=LLM_MODEL, temperature=0)
+    llm = ChatOllama(model=llm_model, temperature=0)
     resp = llm.invoke(full_prompt)
     answer_text = getattr(resp, "content", str(resp))
 
