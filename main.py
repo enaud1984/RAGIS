@@ -174,6 +174,7 @@ async def upload_files(request: Request, files: list[UploadFile] = File(...)):
 if __name__ == "__main__":
     import uvicorn
     run_migrations()  # Esegue creazione DB
+    """
     parameter_db = ParameterDB()
     parameter_db.set("llm_model", "mistral", descrizione="Modello LLM da utilizzare")
     parameter_db.set("embed_model", "intfloat/e5-large-v2", descrizione="Modello di embedding da utilizzare")
@@ -183,6 +184,6 @@ if __name__ == "__main__":
     parameter_db.set("distance_threshold", 0.6, tipo="decimale",descrizione="Soglia di similarità")
     parameter_db.set("EXCLUDED_EXTS",".md, .csv, .png, .jpg, .jpeg", tipo="tupla",descrizione="Cartella documenti")
     parameter_db.set("DATA_DIR","Documenti", tipo="string",descrizione="Cartella documenti")
-
+    """
     log.info("Avvio server uvicorn su 0.0.0.0:8000")
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
