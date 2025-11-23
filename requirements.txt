@@ -14,3 +14,6 @@ unstructured
 pandas
 python-docx
 msoffcrypto-tool
+streamlit
+PyJWT
+bcrypt

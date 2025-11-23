@@ -25,3 +25,12 @@ class DBConnection:
 
     def cursor(self):
         return self.conn.cursor()
+
+    def commit(self):
+        """Commit della transazione"""
+        self.conn.commit()
+
+    def close(self):
+        """Chiude la connessione"""
+        if self.conn:
+            self.conn.close()

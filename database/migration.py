@@ -1,9 +1,10 @@
 from database.connection import DBConnection
+from auth import hash_password
 
 def run_migrations():
     conn = DBConnection().conn
 
-    # Tabella utenti
+    # Crea tabella utenti se manca
     conn.execute("""
     CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -14,7 +15,7 @@ def run_migrations():
     )
     """)
 
-    # Tabella parametri
+    # Crea tabella parametri se manca
     conn.execute("""
     CREATE TABLE IF NOT EXISTS parameters (
         nome TEXT PRIMARY KEY,
@@ -25,8 +26,22 @@ def run_migrations():
     )
     """)
 
-
-    # futuro: altre tabelle
-    # e.g. indexing, logs, api_keys…
+    # futuro: altre tabelle (indexing, logs, api_keys…)
 
     conn.commit()
+
+    # Inserisce utente di default 'admin' con password sicura se non esiste
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE username = ?", ("admin",))
+    row = cur.fetchone()
+    if not row:
+        # Hash della password di default (password sicura per testing)
+        default_password = "Ragis@2025Admin"
+        hashed = hash_password(default_password)
+        conn.execute(
+            "INSERT INTO users (username, password_hash, ruolo) VALUES (?, ?, ?)",
+            ("admin", hashed, "admin"),
+        )
+        conn.commit()
+        print(f"[MIGRATION] Utente 'admin' creato con password di default")
+        print(f"[MIGRATION] Usa: admin / Ragis@2025Admin per il primo login")

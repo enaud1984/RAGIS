@@ -59,6 +59,4 @@ def resolve_params():
     data_dir = Path(db.get("DATA_DIR", "Documenti")).resolve()
     data_dir.mkdir(parents=True, exist_ok=True)
     params["data_dir"] = data_dir
-
-
     return params

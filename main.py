@@ -60,6 +60,10 @@ async def reindex_notturno(app_: FastAPI):
 @asynccontextmanager
 async def lifespan(app_: FastAPI):
     app_.state.reindexing = False
+    # Esegui le migrazioni e assicurati che l'utente di default esista
+    # Questo permette di avere l'utente 'admin' con password 'admin' per i test
+    await asyncio.to_thread(run_migrations)
+
     params = resolve_params()
     # Salvi il job nella app state
     cron_reindex=params["cron_reindex"]
@@ -186,10 +190,17 @@ def login(body:LoginRequest):
 
 @app.post("/registrazione", tags=["admin"])
 def register(body:UserRequest,payload: dict = Depends(validate_token) ):
+    # Solo admin può creare nuovi utenti
+    ruolo_richiedente = payload.get("ruolo", "").lower()
+    if ruolo_richiedente != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin può creare utenti")
+    
     conn = DBConnection()
     cur = conn.cursor()
 
     hashed = hash_password(body.password)
+    
+    log.info(f"Tentativo di registrazione: username={body.username}, ruolo={body.ruolo}")
 
     try:
         cur.execute("""
@@ -198,8 +209,10 @@ def register(body:UserRequest,payload: dict = Depends(validate_token) ):
         """, (body.username, hashed, body.ruolo))
 
         conn.commit()
+        log.info(f"Utente {body.username} creato con successo")
 
     except Exception as e:
+        log.exception(f"Errore nella creazione utente {body.username}: {e}")
         raise HTTPException(status_code=400, detail="Username già esistente")
 
     return {"messaggio": "Registrazione completata"}
