@@ -20,21 +20,19 @@ import shutil
 from contextlib import asynccontextmanager
 
 import aiocron
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Body, HTTPException, Request, UploadFile, File, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from auth import hash_password, verify_password, create_jwt, validate_token
 from database.connection import DBConnection
-from database.parameter_db import ParameterDB
+from database.migration import run_migrations
 from logger_ragis.rag_log import RagLog
-from fastapi import FastAPI, Body, HTTPException, Request, UploadFile, File, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from settings import *
 from rag.embeddings import get_vector_db
 from rag.indexing import build_vector_db
 from rag.rag_query import decide_from_db, query_rag
-
-from database.migration import run_migrations
+from settings import *
 
 log = RagLog.get_logger("Ragis")
 
@@ -66,13 +64,13 @@ async def lifespan(app_: FastAPI):
 
     params = resolve_params()
     # Salvi il job nella app state
-    cron_reindex=params["cron_reindex"]
+    cron_reindex = params["cron_reindex"]
     cron_job = aiocron.crontab(cron_reindex, func=reindex_notturno, args=(app_,))
     app_.state.cron_job = cron_job
 
     log.info("Reindex giornaliero programmato alle 03:00")
 
-    yield   # <- FastAPI inizia qui a servire richieste
+    yield  # <- FastAPI inizia qui a servire richieste
 
     # Shutdown
     app_.state.cron_job.stop()
@@ -91,6 +89,7 @@ static_dir = FRONTEND_DIR / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR / "static"), name="static")
 
+
 @app.get("/")
 def serve_frontend():
     index_file = FRONTEND_DIR / "index.html"
@@ -100,15 +99,15 @@ def serve_frontend():
 
 
 @app.post("/chat/", response_model=ChatResponse, tags=["chat"])
-async def chat(request:Request, body: ChatRequest = Body(...), payload: dict = Depends(validate_token) ):
+async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = Depends(validate_token)):
     if request.app.state.reindexing:
         return {
-            "reindex":True,
+            "reindex": True,
             "testo": "Il sistema sta aggiornando il database. "
-                        "Riprova tra qualche minuto."}
+                     "Riprova tra qualche minuto."}
 
     params = resolve_params()
-    top_k= body.top_k if body.top_k is not None else params["top_k"]
+    top_k = body.top_k if body.top_k is not None else params["top_k"]
     distance_threshold = (
         body.distance_threshold
         if body.distance_threshold is not None
@@ -118,14 +117,18 @@ async def chat(request:Request, body: ChatRequest = Body(...), payload: dict = D
     if not body.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt vuoto")
 
-    match, msg = decide_from_db(body.prompt, threshold=body.distance_threshold or distance_threshold, top_k=body.top_k or top_k)
+    match, msg = decide_from_db(body.prompt, threshold=body.distance_threshold or distance_threshold,
+                                top_k=body.top_k or top_k)
     if not match:
         return ChatResponse(answer="Non ho trovato informazioni rilevanti nei documenti.", sources=[])
 
     try:
-        answer, sources = query_rag(body.prompt, top_k=body.top_k or top_k, distance_threshold=body.distance_threshold or distance_threshold)
+        answer, sources = query_rag(body.prompt, top_k=body.top_k or top_k,
+                                    distance_threshold=body.distance_threshold or distance_threshold)
         if not answer:
-            return ChatResponse(answer="Non ho abbastanza informazioni nei documenti per rispondere. Specifica contesto o carica documenti.", sources=sources)
+            return ChatResponse(
+                answer="Non ho abbastanza informazioni nei documenti per rispondere. Specifica contesto o carica documenti.",
+                sources=sources)
         return ChatResponse(answer=answer, sources=sources)
     except Exception as e:
         log.exception("Errore query_rag")
@@ -133,7 +136,7 @@ async def chat(request:Request, body: ChatRequest = Body(...), payload: dict = D
 
 
 @app.get("/reindex/", tags=["admin"])
-def reindex(payload: dict = Depends(validate_token) ):
+def reindex(payload: dict = Depends(validate_token)):
     try:
         result = build_vector_db()
         return {"message": result.get("message", "OK")}
@@ -142,7 +145,7 @@ def reindex(payload: dict = Depends(validate_token) ):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/debug_db/",)
+@app.get("/debug_db/", )
 def debug_db():
     try:
         vectordb = get_vector_db()
@@ -154,15 +157,16 @@ def debug_db():
         log.exception("Errore debug DB")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/save_parameters",tags=["admin"])
-def save_parameters(body,payload: dict = Depends(validate_token) ):
+
+@app.post("/save_parameters", tags=["admin"])
+def save_parameters(body, payload: dict = Depends(validate_token)):
     for key, value in body.items():
         parameter_db = ParameterDB()
         parameter_db.set(key, value)
 
 
 @app.post("/login")
-def login(body:LoginRequest):
+def login(body: LoginRequest):
     conn = DBConnection()
     cur = conn.cursor()
 
@@ -189,17 +193,17 @@ def login(body:LoginRequest):
 
 
 @app.post("/registrazione", tags=["admin"])
-def register(body:UserRequest,payload: dict = Depends(validate_token) ):
+def register(body: UserRequest, payload: dict = Depends(validate_token)):
     # Solo admin può creare nuovi utenti
     ruolo_richiedente = payload.get("ruolo", "").lower()
     if ruolo_richiedente != "admin":
         raise HTTPException(status_code=403, detail="Solo admin può creare utenti")
-    
+
     conn = DBConnection()
     cur = conn.cursor()
 
     hashed = hash_password(body.password)
-    
+
     log.info(f"Tentativo di registrazione: username={body.username}, ruolo={body.ruolo}")
 
     try:
@@ -218,16 +222,115 @@ def register(body:UserRequest,payload: dict = Depends(validate_token) ):
     return {"messaggio": "Registrazione completata"}
 
 
+@app.get("/lista-utenti", tags=["admin"])
+def lista_utenti(payload: dict = Depends(validate_token)):
+    # Solo admin può leggere la lista utenti
+    ruolo_richiedente = payload.get("ruolo", "").lower()
+    if ruolo_richiedente != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin può accedere alla lista utenti")
+
+    conn = DBConnection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("SELECT id, username, password_hash, ruolo FROM users")
+        utenti = cur.fetchall()
+
+        # Trasformazione in dizionari
+        result = [
+            {"id": row[0], "username": row[1], "password_hash": row[2], "ruolo": row[3]}
+            for row in utenti
+        ]
+
+        return {"utenti": result}
+
+    except Exception as e:
+        log.exception(f"Errore durante la lettura utenti: {e}")
+        raise HTTPException(status_code=500, detail="Errore server interno")
+
+
+@app.put("/aggiorna-utente/{user_id}", tags=["admin"])
+def aggiorna_utente(user_id: int, body: UserRequest, payload: dict = Depends(validate_token)):
+    # Solo admin
+    ruolo_richiedente = payload.get("ruolo", "").lower()
+    if ruolo_richiedente != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin può aggiornare utenti")
+
+    conn = DBConnection()
+    cur = conn.cursor()
+
+    # Costruzione dinamica dei campi aggiornabili
+    update_fields = []
+    values = []
+
+    if body.username:
+        update_fields.append("username = ?")
+        values.append(body.username)
+
+    if body.ruolo:
+        update_fields.append("ruolo = ?")
+        values.append(body.ruolo)
+
+    if body.password:
+        hashed = hash_password(body.password)
+        update_fields.append("password_hash = ?")
+        values.append(hashed)
+
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+
+    values.append(user_id)
+
+    query = f"UPDATE users SET {', '.join(update_fields)} WHERE id = ?"
+
+    try:
+        cur.execute(query, tuple(values))
+        conn.conn.commit()
+
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Utente non trovato")
+
+        return {"messaggio": "Utente aggiornato correttamente"}
+
+    except Exception as e:
+        log.exception(f"Errore aggiornamento utente {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante aggiornamento")
+
+
+@app.delete("/cancella-utente/{user_id}", tags=["admin"])
+def cancella_utente(user_id: int, payload: dict = Depends(validate_token)):
+    # Solo admin
+    ruolo_richiedente = payload.get("ruolo", "").lower()
+    if ruolo_richiedente != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin può cancellare utenti")
+
+    conn = DBConnection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.conn.commit()
+
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Utente non trovato")
+
+        return {"messaggio": "Utente cancellato con successo"}
+
+    except Exception as e:
+        log.exception(f"Errore cancellazione utente {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante cancellazione utente")
+
+
 @app.post("/upload/", tags=["admin"])
-def upload_files(request: Request, files: list[UploadFile] = File(...),payload: dict = Depends(validate_token)):
+def upload_files(request: Request, files: list[UploadFile] = File(...), payload: dict = Depends(validate_token)):
     saved_files = []
     params = resolve_params()
     data_dir = params["data_dir"]
     if request.app.state.reindexing:
         return {
-            "reindex":True,
+            "reindex": True,
             "testo": "Il sistema sta aggiornando il database. "
-                        "Riprova tra qualche minuto."}
+                     "Riprova tra qualche minuto."}
 
     for file in files:
         dest_path = Path(data_dir) / file.filename
@@ -241,8 +344,10 @@ def upload_files(request: Request, files: list[UploadFile] = File(...),payload: 
         "files_salvati": saved_files
     }
 
+
 if __name__ == "__main__":
     import uvicorn
+
     run_migrations()  # Esegue creazione DB
     """solo una volta per inserire i parametri altrimenti manualmente
     parameter_db = ParameterDB()
