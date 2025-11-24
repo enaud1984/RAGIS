@@ -43,5 +43,4 @@ def run_migrations():
             ("admin", hashed, "admin"),
         )
         conn.commit()
-        print(f"[MIGRATION] Utente 'admin' creato con password di default")
-        print(f"[MIGRATION] Usa: admin / Ragis@2025Admin per il primo login")
+

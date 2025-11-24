@@ -61,7 +61,7 @@ async def reindex_notturno(app_: FastAPI):
 async def lifespan(app_: FastAPI):
     app_.state.reindexing = False
     # Esegui le migrazioni e assicurati che l'utente di default esista
-    # Questo permette di avere l'utente 'admin' con password 'admin' per i test
+    # Questo permette di avere l'utente 'admin' con password 'admin'
     await asyncio.to_thread(run_migrations)
 
     params = resolve_params()
