@@ -142,8 +142,8 @@ def reindex(payload: dict = Depends(validate_token) ):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/debug_db/", tags=["admin"])
-async def debug_db():
+@app.get("/debug_db/",)
+def debug_db():
     try:
         vectordb = get_vector_db()
         all_data = vectordb.get()
@@ -219,7 +219,7 @@ def register(body:UserRequest,payload: dict = Depends(validate_token) ):
 
 
 @app.post("/upload/", tags=["admin"])
-async def upload_files(request: Request, files: list[UploadFile] = File(...),payload: dict = Depends(validate_token)):
+def upload_files(request: Request, files: list[UploadFile] = File(...),payload: dict = Depends(validate_token)):
     saved_files = []
     params = resolve_params()
     data_dir = params["data_dir"]
