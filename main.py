@@ -208,7 +208,7 @@ def register(body:UserRequest,payload: dict = Depends(validate_token) ):
             VALUES (?, ?, ?)
         """, (body.username, hashed, body.ruolo))
 
-        conn.commit()
+        conn.conn.commit()
         log.info(f"Utente {body.username} creato con successo")
 
     except Exception as e:
