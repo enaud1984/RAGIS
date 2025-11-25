@@ -2,7 +2,7 @@ from logger_ragis.rag_log import RagLog
 from functools import lru_cache
 from settings import *
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain.embeddings import HuggingFaceEmbeddings
 
 log = RagLog.get_logger("embedding")
 # --------- Singleton factories for embeddings & vectordb ----------

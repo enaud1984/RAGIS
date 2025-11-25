@@ -2,12 +2,14 @@ import glob
 import hashlib
 
 
-from langchain_community.document_loaders import (PyPDFLoader,
-                                                  TextLoader,
-                                                  UnstructuredEmailLoader,
-                                                  UnstructuredExcelLoader,
-                                                  UnstructuredWordDocumentLoader)
-from langchain_unstructured import UnstructuredLoader
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    TextLoader,
+    UnstructuredEmailLoader,
+    UnstructuredExcelLoader,
+    UnstructuredWordDocumentLoader,
+    UnstructuredFileLoader
+)
 
 from settings import *
 from logger_ragis.rag_log import RagLog
@@ -48,7 +50,7 @@ def smart_loader(path: Path):
     if ext in (".xls", ".xlsx"):
         return UnstructuredExcelLoader(str(path))
     # fallback
-    return UnstructuredLoader(str(path))
+    return UnstructuredFileLoader(str(path))
 
 def get_file_hash(path: Path) -> str:
     """MD5 file hash (usato per dedup)."""
