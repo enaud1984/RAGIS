@@ -65,10 +65,10 @@ def query_rag(question: str, top_k: int = None, distance_threshold: float = None
         sources.append({"source": doc.metadata.get("source"), "distance": f"{dist:.3f}", "chunk_index": str(doc.metadata.get("chunk_index", "-"))})
 
     context = "\n\n---\n\n".join(context_parts)
+    db = ParameterDB()
 
     system_prompt = (
-        """Sei un assistente legale italiano, cordiale ed educato. Usa solo le informazioni presenti nel contesto per formulare la risposta. 
-        Se non c'è abbastanza informazione indica chiaramente che non è possibile rispondere e suggerisci cosa fornire."""
+        db.get("DIRETTIVA_PROMPT")
     )
 
     full_prompt = f"{system_prompt}CONTESTO:\n{context}\n\nDOMANDA:\n{question}\n\nRisposta concisa e puntuale:"

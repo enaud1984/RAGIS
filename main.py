@@ -359,6 +359,7 @@ if __name__ == "__main__":
     parameter_db.set("distance_threshold", 0.6, tipo="decimale",descrizione="Soglia di similarità")
     parameter_db.set("EXCLUDED_EXTS",".md, .csv, .png, .jpg, .jpeg", tipo="tupla",descrizione="Cartella documenti")
     parameter_db.set("DATA_DIR","Documenti", tipo="string",descrizione="Cartella documenti")
+    parameter_db.set("DIRETTIVA_PROMPT",DIRETTIVA_PROMPT, tipo="string",descrizione="Direttiva di prompt per il modello")
     """
     log.info("Avvio server uvicorn su 0.0.0.0:8000")
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
