@@ -12,8 +12,8 @@ def decide_from_db(prompt: str, threshold: float = 0.7, top_k: int = 10) -> Tupl
     vectordb = get_vector_db()
 
     # 1) Prompt troppo breve → niente RAG
-    if len(prompt.split()) < 4:
-        return False, "Prompt troppo breve per una ricerca affidabile."
+    #if len(prompt.split()) < 4:
+    #    return False, "Prompt troppo breve per una ricerca affidabile."
 
     # 2) Threshold dinamico
     if len(prompt.split()) < 6:

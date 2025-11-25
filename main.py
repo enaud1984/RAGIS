@@ -119,8 +119,9 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
 
     match, msg = decide_from_db(body.prompt, threshold=body.distance_threshold or distance_threshold,
                                 top_k=body.top_k or top_k)
+    answer_init=""
     if not match:
-        return ChatResponse(answer="Non ho trovato informazioni rilevanti nei documenti.", sources=[])
+        answer_init = "Non ho trovato informazioni rilevanti nei documenti."
 
     try:
         answer, sources = query_rag(body.prompt, top_k=body.top_k or top_k,
@@ -129,7 +130,8 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
             return ChatResponse(
                 answer="Non ho abbastanza informazioni nei documenti per rispondere. Specifica contesto o carica documenti.",
                 sources=sources)
-        return ChatResponse(answer=answer, sources=sources)
+
+        return ChatResponse(answer=f"{answer_init} {answer}", sources=sources)
     except Exception as e:
         log.exception("Errore query_rag")
         raise HTTPException(status_code=500, detail=str(e))
