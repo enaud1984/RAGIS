@@ -57,21 +57,43 @@ def query_rag(question: str, top_k: int = None, distance_threshold: float = None
 
     # costruisco contesto limitato (es. primi 5 chunk)
     max_chunks = 5
+
     context_parts = []
     sources = []
+
+    # Costruzione contesto documenti
     for i, (doc, dist) in enumerate(filtered[:max_chunks]):
-        snippet = doc.page_content
-        context_parts.append(f"Fonte: {doc.metadata.get('source')} (distanza: {dist:.3f})\n{snippet}")
-        sources.append({"source": doc.metadata.get("source"), "distance": f"{dist:.3f}", "chunk_index": str(doc.metadata.get("chunk_index", "-"))})
+        snippet = doc.page_content.strip()
+        src = doc.metadata.get('source')
+        idx = doc.metadata.get("chunk_index", "-")
+        context_parts.append(
+            f"📄 Fonte: {src} | Chunk: {idx} | Distanza: {dist:.3f}\n{snippet}"
+        )
+        sources.append({
+            "source": src,
+            "distance": f"{dist:.3f}",
+            "chunk_index": str(idx)
+        })
 
-    context = "\n\n---\n\n".join(context_parts)
+    # Se nessun documento è rilevante
+    if context_parts:
+        context = "\n\n---\n\n".join(context_parts)
+    else:
+        context = ""  # CONTENUTO VUOTO = non costringiamo il modello a usarlo
+
+    # Recupero direttiva dal DB
     db = ParameterDB()
+    system_prompt = db.get("DIRETTIVA_PROMPT")
 
-    system_prompt = (
-        db.get("DIRETTIVA_PROMPT")
-    )
+    full_prompt = f"""
+    {system_prompt}
 
-    full_prompt = f"{system_prompt}CONTESTO:\n{context}\n\nDOMANDA:\n{question}\n\nRisposta concisa e puntuale:"
+    CONTESTO (usalo SOLO se pertinente):
+    {context if context else "Nessun contesto rilevante trovato."}
+
+    DOMANDA DELL'UTENTE:
+    {question}
+    """
 
     llm = ChatOllama(model=llm_model, temperature=0)
     resp = llm.invoke(full_prompt)
