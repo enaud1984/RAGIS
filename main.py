@@ -194,12 +194,12 @@ def login(body: LoginRequest):
     row = cur.fetchone()
 
     if not row:
-        raise HTTPException(status_code=401, detail="Credenziali non valide")
+        raise HTTPException(status_code=401, detail="Credenziali non valide - nessun utente trovato")
 
     stored_hash = row["password_hash"]
 
     if not verify_password(body.password, stored_hash):
-        raise HTTPException(status_code=401, detail="Credenziali non valide")
+        raise HTTPException(status_code=401, detail="Credenziali non valide - password")
 
     ruolo = row["ruolo"]
 
