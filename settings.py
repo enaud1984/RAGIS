@@ -50,7 +50,7 @@ def resolve_params():
     )
     params["cron_reindex"] = db.get("cron_reindex", "0 3 * * *")  # Default: ogni giorno alle 3 AM
     data_dir = Path(db.get("DATA_DIR", "Documenti")).resolve()
-    data_dir.mkdir(parents=True, exist_ok=True)
+    """data_dir.mkdir(parents=True, exist_ok=True)"""
     params["data_dir"] = data_dir
     params["DIRETTIVA_PROMPT"] = db.get("DIRETTIVA_PROMPT","")
     models=db.get("Models","mistral, qwen3-vi:8b, qwen3-vi:4b, qwen3:30b, qwen3:8b, qwen3:4b, gemma:2b")
