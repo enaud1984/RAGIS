@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import sys
 from contextlib import asynccontextmanager
 
 import aiocron
@@ -36,6 +37,11 @@ from settings import *
 
 log = RagLog.get_logger("Ragis")
 
+#per Pyinstaller usa la cartella temporanea creata
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys._MEIPASS)
+else:
+    BASE_DIR = Path(__file__).parent
 
 async def reindex_notturno(app_: FastAPI):
     """
