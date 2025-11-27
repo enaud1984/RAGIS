@@ -159,13 +159,31 @@ def debug_db():
         log.exception("Errore debug DB")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/get_parameters", tags=["admin"])
+def get_parameters(payload: dict = Depends(validate_token)):
+    return resolve_params()
+
 
 @app.post("/save_parameters", tags=["admin"])
 def save_parameters(body, payload: dict = Depends(validate_token)):
-    for key, value in body.items():
+    try:
         parameter_db = ParameterDB()
-        parameter_db.set(key, value)
+        for key, value in body.items():
+            parameter_db.set(key, value)
+        return {"message": "Parametri salvati con successo"}
+    except Exception as e:
+        log.exception("Errore salvataggio parametri")
+        raise HTTPException(status_code=401, detail=str(e))
 
+@app.get("/get_models",tags=["admin"])
+def get_models(payload: dict = Depends(validate_token)):
+    try:
+        parameter=resolve_params()
+        models=parameter["Models"]
+        return {"models": models}
+    except Exception as e:
+        log.exception("Errore recupero modelli")
+        raise HTTPException(status_code=401, detail=str(e))
 
 @app.post("/login")
 def login(body: LoginRequest):
@@ -351,6 +369,7 @@ if __name__ == "__main__":
     import uvicorn
 
     run_migrations()  # Esegue creazione DB
+    parameter_db = ParameterDB()
     """solo una volta per inserire i parametri altrimenti manualmente
     parameter_db = ParameterDB()
     parameter_db.set("llm_model", "mistral", descrizione="Modello LLM da utilizzare")
@@ -362,8 +381,10 @@ if __name__ == "__main__":
     parameter_db.set("EXCLUDED_EXTS",".md, .csv, .png, .jpg, .jpeg", tipo="tupla",descrizione="Cartella documenti")
     parameter_db.set("DATA_DIR","Documenti", tipo="string",descrizione="Cartella documenti")
     parameter_db.set("DIRETTIVA_PROMPT",DIRETTIVA_PROMPT, tipo="string",descrizione="Direttiva di prompt per il modello")
+    parameter_db.set("Models","mistral, qwen3-vi:8b, qwen3-vi:4b, qwen3:30b, qwen3:8b, qwen3:4b, gemma:2b", tipo="list",descrizione="Modelli LLM disponibili")
     """
-
+    parameter_db.set("Models", "mistral, qwen3-vi:8b, qwen3-vi:4b, qwen3:30b, qwen3:8b, qwen3:4b, gemma:2b",
+                     tipo="string", descrizione="Modelli LLM disponibili")
 
     log.info("Avvio server uvicorn su 0.0.0.0:8000")
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
