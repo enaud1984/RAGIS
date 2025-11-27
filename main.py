@@ -369,7 +369,7 @@ if __name__ == "__main__":
     import uvicorn
 
     run_migrations()  # Esegue creazione DB
-    parameter_db = ParameterDB()
+
     """solo una volta per inserire i parametri altrimenti manualmente
     parameter_db = ParameterDB()
     parameter_db.set("llm_model", "mistral", descrizione="Modello LLM da utilizzare")
@@ -383,8 +383,6 @@ if __name__ == "__main__":
     parameter_db.set("DIRETTIVA_PROMPT",DIRETTIVA_PROMPT, tipo="string",descrizione="Direttiva di prompt per il modello")
     parameter_db.set("Models","mistral, qwen3-vi:8b, qwen3-vi:4b, qwen3:30b, qwen3:8b, qwen3:4b, gemma:2b", tipo="list",descrizione="Modelli LLM disponibili")
     """
-    parameter_db.set("Models", "mistral, qwen3-vi:8b, qwen3-vi:4b, qwen3:30b, qwen3:8b, qwen3:4b, gemma:2b",
-                     tipo="string", descrizione="Modelli LLM disponibili")
 
     log.info("Avvio server uvicorn su 0.0.0.0:8000")
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
