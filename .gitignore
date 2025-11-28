@@ -8,5 +8,6 @@ __pycache__/
 .idea
 /logs/
 /.venv/
-
+/db_sql/app.db
 /db_sql/
+/.venv311/
