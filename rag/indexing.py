@@ -51,6 +51,8 @@ def build_vector_db() -> Dict[str, str]:
         root_hash = c.metadata.get("hash", "nohash")
         c.metadata["chunk_index"] = i
         ids.append(f"{root_hash}-{i}")
+    if not chunks:
+        return {"message": "Nessun chunk da indicizzare, documento ignorato."}
 
     vectordb.add_documents(documents=chunks, ids=ids)
 
