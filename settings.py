@@ -53,7 +53,7 @@ def resolve_params():
     """data_dir.mkdir(parents=True, exist_ok=True)"""
     params["data_dir"] = data_dir
     params["DIRETTIVA_PROMPT"] = db.get("DIRETTIVA_PROMPT","")    
-    models_str = db.get("Models","mistral, qwen3-vi:8b, qwen3-vi:4b, qwen3:30b, qwen3:8b, qwen3:4b, gemma:2b")
+    models_str = db.get("Models","mistral:latest, qwen3-vi:8b, qwen3-vi:4b, qwen3:30b, qwen3:8b, qwen3:4b, gemma:2b")
     models = [m.strip() for m in models_str.split(",") if m.strip()]
     params["Models"] = models
     return params
