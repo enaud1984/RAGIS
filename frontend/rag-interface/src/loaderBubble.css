@@ -1,0 +1,32 @@
+.gpt-loader-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* Nessuno sfondo: si integra nel tema corrente */
+  background: transparent;
+  border-radius: 12px;
+  padding: 0;
+  margin: 12px 0;
+  width: fit-content;
+}
+
+.gpt-loader-dot {
+  width: 8px;
+  height: 8px;
+  /* Colore dei puntini: neutro, si adatta a temi chiari/scuri */
+  background-color: #b6b6b6;
+  border-radius: 50%;
+  animation: gptBounce 1.4s infinite ease-in-out both;
+}
+
+.gpt-loader-dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+.gpt-loader-dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes gptBounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
