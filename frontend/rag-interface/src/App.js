@@ -130,6 +130,8 @@ function App() {
   });
   const [defaultParams, setDefaultParams] = useState(null);
   const [llmModels, setLlmModels] = useState([]);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [downloadingModel, setDownloadingModel] = useState(false);
 
   // Valori di default hardcoded per il reset
   const HARDCODED_DEFAULTS = {
@@ -162,6 +164,7 @@ function App() {
   // State per categorie espandibili sidebar
   const [openCategory, setOpenCategory] = useState(null);
   const [chatHistory, setChatHistory] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Load persisted session
   useEffect(() => {
@@ -433,6 +436,38 @@ function App() {
 
   const handleSaveParams = async () => {
     try {
+      // Verifica se il modello selezionato è installato
+      const selectedModel = llmModels.find(m => 
+        (typeof m === 'string' ? m : m.name) === modelParams.llm_model
+      );
+      const needsDownload = selectedModel && typeof selectedModel === 'object' && !selectedModel.installed;
+      
+      // Se il modello non è installato, scaricalo prima
+      if (needsDownload) {
+        setDownloadingModel(true);
+        setStatusMessage(`Download di ${modelParams.llm_model} in corso...`);
+        
+        const headers = { "Content-Type": "application/json" };
+        if (user && user.token) headers["Authorization"] = `Bearer ${user.token}`;
+        
+        const downloadResponse = await fetch(`${API_BASE}/download_model`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ model_name: modelParams.llm_model })
+        });
+        
+        if (!downloadResponse.ok) {
+          const errorData = await downloadResponse.json();
+          setStatusMessage(`Errore download: ${errorData.detail || 'Download fallito'}`);
+          setDownloadingModel(false);
+          return;
+        }
+        
+        // Ricarica la lista dei modelli per aggiornare lo stato
+        await loadLlmModels();
+        setDownloadingModel(false);
+      }
+      
       setStatusMessage("Salvataggio parametri...");
       const headers = { "Content-Type": "application/json" };
       if (user && user.token) headers["Authorization"] = `Bearer ${user.token}`;
@@ -486,6 +521,7 @@ function App() {
     } catch (err) {
       console.error("Errore salvataggio parametri:", err);
       setStatusMessage("Errore di rete durante il salvataggio.");
+      setDownloadingModel(false);
     }
   };
 
@@ -705,16 +741,20 @@ function App() {
 
   return (
     <div className="container">
+      {/* Overlay per chiudere sidebar su mobile */}
+      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)}></div>}
+      
       {/* Sidebar */}
-      <aside className="sidebar">
-        <div className="top-section">
+      <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
+        {/* Sezione statica: Logo, Nuova Chat, Menu Principale */}
+        <div className="sidebar-header">
           <div className="logo">
             <img src="/ragis-logo.png" className="logo-img" alt="RAGIS Logo" />
           </div>
 
           {/* Pulsante Nuova Chat */}
           <button className="new-chat-btn" onClick={() => window.location.reload()}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14m-7-7h14" />
             </svg>
             Nuova chat
@@ -798,7 +838,10 @@ function App() {
               </div>
             </>
           )}
+        </div>
 
+        {/* Sezione scrollabile: Cronologia, Ricerca */}
+        <div className="top-section">
           {/* Sezione Cronologia Chat */}
           <div className="chat-history-section">
             <div className="section-title">Cronologia (48h)</div>
@@ -829,41 +872,44 @@ function App() {
               )}
             </div>
           </div>
+
+          {/* Sezione Ricerca - scrollabile */}
+          <div className="search-section">
+            <div className="section-title">Ricerca</div>
+            
+            <div className="search-options">
+              <label>
+                <span>Ricerca - Solo locale</span>
+                <input
+                  type="checkbox"
+                  name="local"
+                  checked={searchMode.local}
+                  onChange={handleCheckboxChange}
+                />
+                <span className="switch"></span>
+              </label>
+              <label>
+                <span>Ricerca - Locale + Online</span>
+                <input
+                  type="checkbox"
+                  name="online"
+                  checked={searchMode.online}
+                  onChange={handleCheckboxChange}
+                />
+                <span className="switch"></span>
+              </label>
+            </div>
+
+            <input
+              id="file-upload-sidebar"
+              type="file"
+              onChange={handleUploadDocument}
+              style={{ display: "none" }}
+            />
+          </div>
         </div>
 
         <div className="bottom-section">
-          {/* Mini-titolo sezione ricerca */}
-          <div className="section-title">Ricerca</div>
-          
-          <div className="search-options">
-            <label>
-              <span>Ricerca - Solo locale</span>
-              <input
-                type="checkbox"
-                name="local"
-                checked={searchMode.local}
-                onChange={handleCheckboxChange}
-              />
-              <span className="switch"></span>
-            </label>
-            <label>
-              <span>Ricerca - Locale + Online</span>
-              <input
-                type="checkbox"
-                name="online"
-                checked={searchMode.online}
-                onChange={handleCheckboxChange}
-              />
-              <span className="switch"></span>
-            </label>
-          </div>
-
-          <input
-            id="file-upload-sidebar"
-            type="file"
-            onChange={handleUploadDocument}
-            style={{ display: "none" }}
-          />
           <div className="account">Account: {user ? user.username : "-"}</div>
           {user && (
             <button onClick={handleLogout} className="logout-btn">
@@ -893,17 +939,64 @@ function App() {
               </button>
             </div>
             <div className="params-form">
-              <div className="field-row">
+              <div className="field-row model-field-row">
                 <label>Modello LLM:</label>
-                <select name="llm_model" value={modelParams.llm_model} onChange={handleParamChange}>
-                  {llmModels.length > 0 ? (
-                    llmModels.map((model) => (
-                      <option key={model} value={model}>{model}</option>
-                    ))
-                  ) : (
-                    <option value="mistral">mistral</option>
+                <div className="custom-select-wrapper">
+                  <div 
+                    className="custom-select-trigger" 
+                    onClick={() => setShowModelDropdown(!showModelDropdown)}
+                  >
+                    <span>{modelParams.llm_model}</span>
+                    <svg className={`chevron ${showModelDropdown ? 'open' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </div>
+                  {showModelDropdown && (
+                    <div className="custom-select-dropdown">
+                      {llmModels.length > 0 ? (
+                        llmModels.map((model) => {
+                          const modelName = typeof model === 'string' ? model : model.name;
+                          const isInstalled = typeof model === 'string' ? true : model.installed;
+                          const isSelected = modelName === modelParams.llm_model;
+                          return (
+                            <div 
+                              key={modelName} 
+                              className={`custom-select-option ${isSelected ? 'selected' : ''}`}
+                              onClick={() => {
+                                setModelParams({...modelParams, llm_model: modelName});
+                                setShowModelDropdown(false);
+                              }}
+                            >
+                              <span className="model-name">
+                                {modelName} {isInstalled ? '✓' : ''}
+                              </span>
+                              {!isInstalled && (
+                                <svg 
+                                  className="download-model-icon" 
+                                  xmlns="http://www.w3.org/2000/svg" 
+                                  viewBox="0 0 24 24" 
+                                  fill="none" 
+                                  stroke="currentColor" 
+                                  strokeWidth="2" 
+                                  strokeLinecap="round" 
+                                  strokeLinejoin="round"
+                                >
+                                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                  <polyline points="7 10 12 15 17 10"></polyline>
+                                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="custom-select-option" onClick={() => setShowModelDropdown(false)}>
+                          <span className="model-name">mistral</span>
+                        </div>
+                      )}
+                    </div>
                   )}
-                </select>
+                </div>
               </div>
               <div className="field-row">
                 <label>Modello Embeddings:</label>
@@ -926,8 +1019,10 @@ function App() {
                 <input name="distance_threshold" type="number" step="0.01" value={modelParams.distance_threshold} onChange={handleParamChange} placeholder="0.6" />
               </div>
               <div className="dialog-buttons">
-                <button onClick={handleSaveParams} className="save-btn">Salva</button>
-                <button onClick={() => setShowParamsPanel(false)} className="close-btn">Chiudi</button>
+                <button onClick={handleSaveParams} className="save-btn" disabled={downloadingModel}>
+                  {downloadingModel ? "Download in corso..." : "Salva"}
+                </button>
+                <button onClick={() => setShowParamsPanel(false)} className="close-btn" disabled={downloadingModel}>Chiudi</button>
               </div>
             </div>
           </div>
@@ -1095,6 +1190,16 @@ function App() {
 
       {/* Main */}
       <main className="main">
+        {/* Pulsante hamburger per mobile */}
+        {!sidebarOpen && (
+          <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+        )}
         <div className="chat-area">
           <div className="chat">
             <div className="chat-messages">
@@ -1154,13 +1259,17 @@ function App() {
         {/* Prompt utente */}
         <div className="prompt-wrapper">
           <div className="input-container">
-            <label htmlFor="file-upload" className="icon-button">+</label>
-            <input
-              id="file-upload"
-              type="file"
-              onChange={handleUploadDocument}
-              style={{ display: "none" }}
-            />
+            {false && ( /* Metti True per visualizzare il +*/
+              <>
+                <label htmlFor="file-upload" className="icon-button">+</label>
+                <input
+                  id="file-upload"
+                  type="file"
+                  onChange={handleUploadDocument}
+                  style={{ display: "none" }}
+                />
+              </>
+            )}
             <textarea
               ref={textareaRef}
               className="chat-input"

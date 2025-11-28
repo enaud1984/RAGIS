@@ -36,7 +36,7 @@ def run_migrations():
     row = cur.fetchone()
     if not row:
         # Hash della password di default (password sicura per testing)
-        default_password = "Ragis@2025Admin"
+        default_password = "admin"
         hashed = hash_password(default_password)
         conn.execute(
             "INSERT INTO users (username, password_hash, ruolo) VALUES (?, ?, ?)",

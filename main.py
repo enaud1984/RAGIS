@@ -19,6 +19,7 @@ import asyncio
 import shutil
 import sys
 from contextlib import asynccontextmanager
+import requests
 
 import aiocron
 from fastapi import FastAPI, Body, HTTPException, Request, UploadFile, File, Depends
@@ -185,10 +186,20 @@ def save_parameters(body: dict = Body(...), payload: dict = Depends(validate_tok
 def get_models(payload: dict = Depends(validate_token)):
     try:
         parameter=resolve_params()
-        models=parameter["Models"]
-        return {"models": models}
+        modelli_generici=parameter["Models"]
+        resp = requests.get("http://localhost:11434/api/tags")
+        resp.raise_for_status()
+        modelli_installati = [m["name"] for m in resp.json().get("models", [])]
+        result = []
+        for model in modelli_generici:
+            result.append({
+                "name": model,
+                "installed": model in modelli_installati
+            })
+
+        return {"models": result}
     except Exception as e:
-        log.exception("Errore recupero modelli")
+        log.exception(f"Errore recupero modelli: {e}")
         raise HTTPException(status_code=401, detail=str(e))
 
 @app.post("/login")
