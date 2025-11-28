@@ -398,7 +398,7 @@ if __name__ == "__main__":
     parameter_db.set("EXCLUDED_EXTS",".md, .csv, .png, .jpg, .jpeg", tipo="tupla",descrizione="Cartella documenti")
     parameter_db.set("DATA_DIR","Documenti", tipo="string",descrizione="Cartella documenti")
     parameter_db.set("DIRETTIVA_PROMPT",DIRETTIVA_PROMPT, tipo="string",descrizione="Direttiva di prompt per il modello")
-    parameter_db.set("Models","mistral, qwen3-vi:8b, qwen3-vi:4b, qwen3:30b, qwen3:8b, qwen3:4b, gemma:2b", tipo="list",descrizione="Modelli LLM disponibili")
+    parameter_db.set("Models","mistral:latest, qwen3-vi:8b, qwen3-vi:4b, qwen3:30b, qwen3:8b, qwen3:4b, gemma:2b", tipo="list",descrizione="Modelli LLM disponibili")
     """
 
     log.info("Avvio server uvicorn su 0.0.0.0:8000")

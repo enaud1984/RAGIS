@@ -165,6 +165,7 @@ function App() {
   const [openCategory, setOpenCategory] = useState(null);
   const [chatHistory, setChatHistory] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [currentChatId, setCurrentChatId] = useState(Date.now());
 
   // Load persisted session
   useEffect(() => {
@@ -350,17 +351,6 @@ function App() {
             next.push({ sender: "RAG", text: data.answer || "Errore nella risposta", loading: false });
           }
           
-          // Salva la chat nella cronologia
-          const newChat = {
-            id: Date.now(),
-            timestamp: Date.now(),
-            preview: currentPrompt.substring(0, 50) + (currentPrompt.length > 50 ? '...' : ''),
-            messages: next
-          };
-          const updatedHistory = [newChat, ...chatHistory].slice(0, 20); // Max 20 chat
-          setChatHistory(updatedHistory);
-          localStorage.setItem('chatHistory', JSON.stringify(updatedHistory));
-          
           return next;
         });
         setStatusMessage("Risposta ricevuta.");
@@ -535,6 +525,45 @@ function App() {
 
   const loadChatFromHistory = (chat) => {
     setChatMessages(chat.messages);
+    setCurrentChatId(chat.id);
+  };
+
+  const saveCurrentChatAndReset = () => {
+    // Salva la chat corrente solo se ci sono messaggi
+    if (chatMessages.length > 0) {
+      const firstUserMessage = chatMessages.find(msg => msg.sender === "utente");
+      const preview = firstUserMessage 
+        ? firstUserMessage.text.substring(0, 50) + (firstUserMessage.text.length > 50 ? '...' : '')
+        : 'Chat senza messaggi';
+      
+      const chatToSave = {
+        id: currentChatId,
+        timestamp: currentChatId,
+        preview: preview,
+        messages: chatMessages
+      };
+      
+      // Controlla se questa chat esiste già (per evitare duplicati)
+      const existingIndex = chatHistory.findIndex(chat => chat.id === currentChatId);
+      let updatedHistory;
+      
+      if (existingIndex >= 0) {
+        // Aggiorna la chat esistente
+        updatedHistory = [...chatHistory];
+        updatedHistory[existingIndex] = chatToSave;
+      } else {
+        // Aggiungi nuova chat
+        updatedHistory = [chatToSave, ...chatHistory].slice(0, 20); // Max 20 chat
+      }
+      
+      setChatHistory(updatedHistory);
+      localStorage.setItem('chatHistory', JSON.stringify(updatedHistory));
+    }
+    
+    // Reset della chat
+    setChatMessages([]);
+    setCurrentChatId(Date.now());
+    window.location.reload();
   };
 
   const deleteChatFromHistory = (chatId) => {
@@ -753,7 +782,7 @@ function App() {
           </div>
 
           {/* Pulsante Nuova Chat */}
-          <button className="new-chat-btn" onClick={() => window.location.reload()}>
+          <button className="new-chat-btn" onClick={saveCurrentChatAndReset}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14m-7-7h14" />
             </svg>
