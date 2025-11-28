@@ -202,6 +202,16 @@ def get_models(payload: dict = Depends(validate_token)):
         log.exception(f"Errore recupero modelli: {e}")
         raise HTTPException(status_code=401, detail=str(e))
 
+@app.post("/download_model")
+def download_model(payload: dict,user_dict: dict = Depends(validate_token)):
+    try:
+        requests.post("http://localhost:11434/api/pull", json={"name": payload.get('model_name')})
+    except Exception as e:
+        log.exception(f"Errore download modello: {e}")
+        raise HTTPException(status_code=401, detail=str(e))
+    return {"message": f"Modello '{payload.get('model_name')}' scaricato e impostato come attivo."}
+
+
 @app.post("/login")
 def login(body: LoginRequest):
     conn = DBConnection()
