@@ -53,7 +53,7 @@ body {
 
 .container {
   display: flex;
-  height: 100vh;
+  min-height: 100vh;
 }
 
 /* ===== TIPOGRAFIA ===== */
@@ -71,13 +71,36 @@ h4 { font-size: 16px; }
 .sidebar {
   width: 300px;
   background: var(--bg-secondary);
-  padding: 32px 24px 24px; /* Ridotto padding top/bottom */
+  padding: 32px 24px 24px;
+
+  /* FIX: sidebar alta quanto lo schermo */
+  height: 100vh;
+
+  /* Layout verticale */
   display: flex;
   flex-direction: column;
-  gap: 24px; /* Gap ridotto da 32px */
-  justify-content: space-between;
+
+  /* Permette lo scroll del contenuto interno */
+  overflow-y: auto;
+
   border-right: 1px solid rgba(45, 55, 72, 0.3);
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
+}
+.sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-full);
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .top-section,
@@ -179,7 +202,8 @@ h4 { font-size: 16px; }
   font-size: 13px;
   color: var(--text-primary);
   white-space: nowrap;
-  overflow: hidden;
+   overflow-x: hidden;
+  overflow-y: auto;
   text-overflow: ellipsis;
   margin-bottom: 4px;
 }
