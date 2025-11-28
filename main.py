@@ -171,7 +171,7 @@ def get_parameters(payload: dict = Depends(validate_token)):
 
 
 @app.post("/save_parameters", tags=["admin"])
-def save_parameters(body, payload: dict = Depends(validate_token)):
+def save_parameters(body: dict = Body(...), payload: dict = Depends(validate_token)):
     try:
         parameter_db = ParameterDB()
         for key, value in body.items():
