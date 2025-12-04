@@ -120,7 +120,7 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
         if body.distance_threshold is not None
         else params["distance_threshold"]
     )
-
+    llm_model = body.llm_model if body.llm_model is not None else params["llm_model"]
     if not body.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt vuoto")
 
@@ -132,7 +132,8 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
 
     try:
         answer, sources = query_rag(body.prompt, top_k=body.top_k or top_k,
-                                    distance_threshold=body.distance_threshold or distance_threshold)
+                                    distance_threshold=body.distance_threshold or distance_threshold,
+                                    llm_model=body.llm_model or llm_model)
         if not answer:
             return ChatResponse(
                 answer="Non ho abbastanza informazioni nei documenti per rispondere. Specifica contesto o carica documenti.",
@@ -390,6 +391,26 @@ def upload_files(request: Request, files: list[UploadFile] = File(...), payload:
         "messagio": "Upload completato.",
         "files_salvati": saved_files
     }
+
+@app.post("/test", tags=["admin"])
+async def test(request: Request, body: ChatRequest = Body(...)):
+    risultati = []
+
+    for domanda in test_domande:
+        nuovo_body = ChatRequest(
+            prompt=domanda,
+            top_k=body.top_k if body.top_k > 0 else None,
+            distance_threshold=body.distance_threshold if body.distance_threshold >0 else None
+        )
+
+        response = await chat(request, nuovo_body)
+        risultati.append({
+            "domanda": domanda,
+            "risposta": response.answer,
+            "sources": response.sources
+        })
+
+    return {"test_results": risultati}
 
 
 if __name__ == "__main__":

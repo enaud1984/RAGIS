@@ -25,6 +25,7 @@ class ChatRequest(BaseModel):
     prompt: str
     top_k: Optional[int] = None
     distance_threshold: Optional[float] = None
+    llm_model: str = None
 
 class ChatResponse(BaseModel):
     answer: str
@@ -103,3 +104,21 @@ ISTRUZIONE FINALE:
 - Se la domanda è generica o non correlata ai documenti, rispondi normalmente in modo professionale.
 - Se servono informazioni aggiuntive, specifica quali mancano.
 """
+
+test_domande=[
+    "Quali sono i punti salienti della difesa che abbiamo presentato contro Ryanair in un contenzioso presso il Giudice di Pace di Carinola?",
+    "Chi sono i nostri assistiti coinvolti in ricorsi per A.T.P. (Accertamento Tecnico Preventivo) contro l'INPS?",
+    "Quali documenti ho sull'azione legale promossa da AGOS DUCATO S.p.A. e quali parti sono coinvolte in quel procedimento?",
+    "Quali sono le informazioni relative alla controversia per risarcimento danni contro Generali Italia S.p.A. che coinvolge il signor Passaretti Antonio?",
+    "Quali sono le controversie più recenti che riguardano il Consorzio Idrico Terra di Lavoro (CITL) e in particolare quelle relative all'annullamento di aggiudicazioni o al recesso dei Comuni?",
+    "Quali sono i ricorsi o le note di udienza che ho depositato per conto del Consorzio per l’Area di Sviluppo Industriale (ASI) dinanzi al Consiglio di Stato?",
+    "Quali sono le principali argomentazioni difensive utilizzate nei ricorsi amministrativi contro il Comune di Marcianise, specialmente in materia edilizia (es. dinieghi di SCIA)?",
+    "Quali documenti ho sull'appello al Consiglio di Stato proposto da Irmi s.r.l. contro ANAS S.p.A.?",
+    "Quali sono i dettagli della controversia IMU che abbiamo seguito contro il Comune di Carinola? Qual è l'esito della sentenza di primo grado?",
+    "Chi sono i clienti difesi nel procedimento di responsabilità erariale dinanzi alla Corte dei Conti e qual è il ruolo che ricoprivano all'epoca dei fatti contestati?",
+    "Quali sono gli accordi di domiciliazione e corrispondenza vigenti e quali studi legali (es. Macchi di Cellere Gangemi, EO Legal) sono i miei principali partner in tali accordi?",
+    "Quali sono i documenti relativi alle richieste di pagamento di competenze professionali inoltrate al Comune di Carinola?",
+    "Quali clienti sono coinvolti in contenziosi con il Comune di Roccamonfina relativi a ordinanze di demolizione o presunti abusi edilizi, e quali consulenze tecniche (CTP) abbiamo in merito?",
+    "Ho documentazione relativa a pignoramenti presso terzi (R. G. E. n.° 8490/2019)? Qual è la situazione debitoria e la retribuzione del debitore coinvolto?",
+    "In che modo è stata gestita l'istanza di riesame per inidoneità presentata al Ministero della Difesa per conto del signor Napolano Roberto?"
+]
