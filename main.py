@@ -69,9 +69,9 @@ async def lifespan(app_: FastAPI):
     # Questo permette di avere l'utente 'admin' con password 'admin'
     await asyncio.to_thread(run_migrations)
 
-    params = resolve_params()
+    app_.state.params = resolve_params()
     # Salvi il job nella app state
-    cron_reindex = params["cron_reindex"]
+    cron_reindex = app_.state.params["cron_reindex"]
     cron_job = aiocron.crontab(cron_reindex, func=reindex_notturno, args=(app_,))
     app_.state.cron_job = cron_job
 
@@ -113,7 +113,7 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
             "testo": "Il sistema sta aggiornando il database. "
                      "Riprova tra qualche minuto."}
     log.info(f"Richiesta chat da utente: {payload.get('username')}, testo: {body.prompt[:50]}...")
-    params = resolve_params()
+    params = request.app_.state.params
     top_k = body.top_k if body.top_k is not None else params["top_k"]
     distance_threshold = (
         body.distance_threshold
@@ -169,7 +169,7 @@ def debug_db():
 
 @app.get("/get_parameters", tags=["admin"])
 def get_parameters(payload: dict = Depends(validate_token)):
-    return resolve_params()
+    return request.app_.state.params
 
 
 @app.post("/save_parameters", tags=["admin"])
@@ -186,7 +186,7 @@ def save_parameters(body: dict = Body(...), payload: dict = Depends(validate_tok
 @app.get("/get_models",tags=["admin"])
 def get_models(payload: dict = Depends(validate_token)):
     try:
-        parameter=resolve_params()
+        parameter=request.app_.state.params
         modelli_generici=parameter["Models"]
         resp = requests.get("http://localhost:11434/api/tags")
         resp.raise_for_status()
@@ -382,7 +382,7 @@ def cancella_utente(user_id: int, payload: dict = Depends(validate_token)):
 @app.post("/upload/", tags=["admin"])
 def upload_files(request: Request, files: list[UploadFile] = File(...), payload: dict = Depends(validate_token)):
     saved_files = []
-    params = resolve_params()
+    params = request.app_.state.params
     data_dir = params["data_dir"]
     if request.app.state.reindexing:
         return {

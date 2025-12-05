@@ -11,7 +11,7 @@ log = RagLog.get_logger("indexing")
 # --------- Indicizzazione incrementale ----------
 def build_vector_db() -> Dict[str, str]:
     log.info("Start indicizzazione incrementale...")
-    params = resolve_params()
+    params = request.app_.state.params
     excluded_exts = params["excluded_exts"]
     vectordb = get_vector_db()
     data_dir = params["data_dir"]

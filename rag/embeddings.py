@@ -13,7 +13,7 @@ def load_embedding_model(model_name: str):
     return HuggingFaceEmbeddings(model_name=model_name)
 
 def get_embeddings():
-    params = resolve_params()
+    params = request.app_.state.params
     model_name = params["embed_model"]
     return load_embedding_model(model_name)
 

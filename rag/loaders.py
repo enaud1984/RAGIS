@@ -20,7 +20,7 @@ log = RagLog.get_logger("loaders")
 def load_all_documents(base_dir: Path) -> List:
     """Carica tutti i documenti utili alla indicizzazione."""
     docs = []
-    params = resolve_params()
+    params = request.app_.state.params
     excluded_exts = params["excluded_exts"]
     for path_str in glob.glob(str(base_dir / "**" / "*.*"), recursive=True):
         path = Path(path_str)

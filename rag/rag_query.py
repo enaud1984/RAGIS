@@ -37,7 +37,7 @@ def decide_from_db(prompt: str, threshold: float = 0.7, top_k: int = 10) -> Tupl
 
 def query_rag(question: str, top_k: int = None, distance_threshold: float = None,llm_model:str=None) -> Tuple[str, List[Dict[str, str]]]:
     log.info("Prompt: %s", question)
-    params = resolve_params()
+    params = request.app_.state.params
 
     top_k = top_k or params["top_k"]
     distance_threshold = distance_threshold or params["distance_threshold"]
