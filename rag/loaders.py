@@ -27,6 +27,7 @@ def load_all_documents(base_dir: Path) -> List:
         if path.suffix.lower() in excluded_exts:
             continue
         try:
+            log.info(f"Caricando documento: {path}")
             loader = smart_loader(path)
             subdocs = loader.load()
             for d in subdocs:
@@ -35,6 +36,7 @@ def load_all_documents(base_dir: Path) -> List:
             log.info("Caricato %s (%d parti)", path.name, len(subdocs))
         except Exception as e:
             log.error("Errore caricando %s: %s", path, e)
+    log.info("Totale documenti caricati: %d", len(docs))
     return docs
 
 def smart_loader(path: Path):

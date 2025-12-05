@@ -27,7 +27,6 @@ def build_vector_db() -> Dict[str, str]:
 
     all_docs = load_all_documents(data_dir)
     valid_docs = [d for d in all_docs if not d.metadata.get("source", "").lower().endswith(excluded_exts)]
-
     new_docs = []
     for doc in valid_docs:
         p = Path(doc.metadata.get("source"))
@@ -42,7 +41,7 @@ def build_vector_db() -> Dict[str, str]:
     if not new_docs:
         log.info("Nessun nuovo documento da indicizzare.")
         return {"message": "Nessun nuovo documento."}
-
+    log.info("RICOSTRUISCO IL DB VETTORIALE CON %d DOCUMENTI NUOVI", len(new_docs))
     splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     chunks = splitter.split_documents(new_docs)
 

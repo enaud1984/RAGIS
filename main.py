@@ -112,7 +112,7 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
             "reindex": True,
             "testo": "Il sistema sta aggiornando il database. "
                      "Riprova tra qualche minuto."}
-
+    log.info(f"Richiesta chat da utente: {payload.get('username')}, testo: {body.prompt[:50]}...")
     params = resolve_params()
     top_k = body.top_k if body.top_k is not None else params["top_k"]
     distance_threshold = (
@@ -215,46 +215,53 @@ def download_model(payload: dict,user_dict: dict = Depends(validate_token)):
 
 @app.post("/login")
 def login(body: LoginRequest):
-    conn = DBConnection()
-    cur = conn.cursor()
+    try:
+        conn = DBConnection()
+        cur = conn.cursor()
 
-    cur.execute("SELECT * FROM users WHERE username = ?", (body.username,))
-    row = cur.fetchone()
+        cur.execute("SELECT * FROM users WHERE username = ?", (body.username,))
+        row = cur.fetchone()
 
-    if not row:
-        raise HTTPException(status_code=401, detail="Credenziali non valide - nessun utente trovato")
+        if not row:
+            raise HTTPException(status_code=401, detail="Credenziali non valide - nessun utente trovato")
 
-    stored_hash = row["password_hash"]
+        stored_hash = row["password_hash"]
 
-    if not verify_password(body.password, stored_hash):
-        raise HTTPException(status_code=401, detail="Credenziali non valide - password")
+        if not verify_password(body.password, stored_hash):
+            raise HTTPException(status_code=401, detail="Credenziali non valide - password")
 
-    ruolo = row["ruolo"]
+        ruolo = row["ruolo"]
 
-    token = create_jwt(body.username, ruolo)
+        token = create_jwt(body.username, ruolo)
+        return {
+            "token": token,
+            "username": body.username,
+            "ruolo": ruolo
+        }
 
-    return {
-        "token": token,
-        "username": body.username,
-        "ruolo": ruolo
-    }
+    except Exception as e:
+        log.exception(f"Errore login utente {body.username}: {e}")
+        raise HTTPException(status_code=500, detail="Errore durante il login")
+    finally:
+        conn.close()
+
 
 
 @app.post("/registrazione", tags=["admin"])
 def register(body: UserRequest, payload: dict = Depends(validate_token)):
-    # Solo admin può creare nuovi utenti
-    ruolo_richiedente = payload.get("ruolo", "").lower()
-    if ruolo_richiedente != "admin":
-        raise HTTPException(status_code=403, detail="Solo admin può creare utenti")
-
-    conn = DBConnection()
-    cur = conn.cursor()
-
-    hashed = hash_password(body.password)
-
-    log.info(f"Tentativo di registrazione: username={body.username}, ruolo={body.ruolo}")
-
     try:
+        # Solo admin può creare nuovi utenti
+        ruolo_richiedente = payload.get("ruolo", "").lower()
+        if ruolo_richiedente != "admin":
+            raise HTTPException(status_code=403, detail="Solo admin può creare utenti")
+
+        conn = DBConnection()
+        cur = conn.cursor()
+
+        hashed = hash_password(body.password)
+
+        log.info(f"Tentativo di registrazione: username={body.username}, ruolo={body.ruolo}")
+
         cur.execute("""
             INSERT INTO users (username, password_hash, ruolo)
             VALUES (?, ?, ?)
@@ -262,25 +269,25 @@ def register(body: UserRequest, payload: dict = Depends(validate_token)):
 
         conn.conn.commit()
         log.info(f"Utente {body.username} creato con successo")
-
+        return {"messaggio": "Registrazione completata"}
     except Exception as e:
         log.exception(f"Errore nella creazione utente {body.username}: {e}")
         raise HTTPException(status_code=400, detail="Username già esistente")
-
-    return {"messaggio": "Registrazione completata"}
+    finally:
+        conn.close()
 
 
 @app.get("/lista-utenti", tags=["admin"])
 def lista_utenti(payload: dict = Depends(validate_token)):
-    # Solo admin può leggere la lista utenti
-    ruolo_richiedente = payload.get("ruolo", "").lower()
-    if ruolo_richiedente != "admin":
-        raise HTTPException(status_code=403, detail="Solo admin può accedere alla lista utenti")
-
-    conn = DBConnection()
-    cur = conn.cursor()
-
     try:
+        # Solo admin può leggere la lista utenti
+        ruolo_richiedente = payload.get("ruolo", "").lower()
+        if ruolo_richiedente != "admin":
+            raise HTTPException(status_code=403, detail="Solo admin può accedere alla lista utenti")
+
+        conn = DBConnection()
+        cur = conn.cursor()
+
         cur.execute("SELECT id, username, password_hash, ruolo FROM users")
         utenti = cur.fetchall()
 
@@ -295,43 +302,44 @@ def lista_utenti(payload: dict = Depends(validate_token)):
     except Exception as e:
         log.exception(f"Errore durante la lettura utenti: {e}")
         raise HTTPException(status_code=500, detail="Errore server interno")
-
+    finally:
+        conn.close()
 
 @app.put("/aggiorna-utente/{user_id}", tags=["admin"])
 def aggiorna_utente(user_id: int, body: UserRequest, payload: dict = Depends(validate_token)):
-    # Solo admin
-    ruolo_richiedente = payload.get("ruolo", "").lower()
-    if ruolo_richiedente != "admin":
-        raise HTTPException(status_code=403, detail="Solo admin può aggiornare utenti")
-
-    conn = DBConnection()
-    cur = conn.cursor()
-
-    # Costruzione dinamica dei campi aggiornabili
-    update_fields = []
-    values = []
-
-    if body.username:
-        update_fields.append("username = ?")
-        values.append(body.username)
-
-    if body.ruolo:
-        update_fields.append("ruolo = ?")
-        values.append(body.ruolo)
-
-    if body.password:
-        hashed = hash_password(body.password)
-        update_fields.append("password_hash = ?")
-        values.append(hashed)
-
-    if not update_fields:
-        raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
-
-    values.append(user_id)
-
-    query = f"UPDATE users SET {', '.join(update_fields)} WHERE id = ?"
-
     try:
+        # Solo admin
+        ruolo_richiedente = payload.get("ruolo", "").lower()
+        if ruolo_richiedente != "admin":
+            raise HTTPException(status_code=403, detail="Solo admin può aggiornare utenti")
+
+        conn = DBConnection()
+        cur = conn.cursor()
+
+        # Costruzione dinamica dei campi aggiornabili
+        update_fields = []
+        values = []
+
+        if body.username:
+            update_fields.append("username = ?")
+            values.append(body.username)
+
+        if body.ruolo:
+            update_fields.append("ruolo = ?")
+            values.append(body.ruolo)
+
+        if body.password:
+            hashed = hash_password(body.password)
+            update_fields.append("password_hash = ?")
+            values.append(hashed)
+
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+
+        values.append(user_id)
+
+        query = f"UPDATE users SET {', '.join(update_fields)} WHERE id = ?"
+
         cur.execute(query, tuple(values))
         conn.conn.commit()
 
@@ -343,19 +351,20 @@ def aggiorna_utente(user_id: int, body: UserRequest, payload: dict = Depends(val
     except Exception as e:
         log.exception(f"Errore aggiornamento utente {user_id}: {e}")
         raise HTTPException(status_code=500, detail="Errore durante aggiornamento")
-
+    finally:
+        conn.close()
 
 @app.delete("/cancella-utente/{user_id}", tags=["admin"])
 def cancella_utente(user_id: int, payload: dict = Depends(validate_token)):
-    # Solo admin
-    ruolo_richiedente = payload.get("ruolo", "").lower()
-    if ruolo_richiedente != "admin":
-        raise HTTPException(status_code=403, detail="Solo admin può cancellare utenti")
-
-    conn = DBConnection()
-    cur = conn.cursor()
-
     try:
+        # Solo admin
+        ruolo_richiedente = payload.get("ruolo", "").lower()
+        if ruolo_richiedente != "admin":
+            raise HTTPException(status_code=403, detail="Solo admin può cancellare utenti")
+
+        conn = DBConnection()
+        cur = conn.cursor()
+
         cur.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.conn.commit()
 
@@ -367,7 +376,8 @@ def cancella_utente(user_id: int, payload: dict = Depends(validate_token)):
     except Exception as e:
         log.exception(f"Errore cancellazione utente {user_id}: {e}")
         raise HTTPException(status_code=500, detail="Errore durante cancellazione utente")
-
+    finally:
+        conn.close()
 
 @app.post("/upload/", tags=["admin"])
 def upload_files(request: Request, files: list[UploadFile] = File(...), payload: dict = Depends(validate_token)):
