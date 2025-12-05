@@ -10,6 +10,7 @@ from langchain_community.document_loaders import (
     UnstructuredWordDocumentLoader,
     UnstructuredFileLoader
 )
+from starlette.requests import Request
 
 from settings import *
 from logger_ragis.rag_log import RagLog
@@ -17,10 +18,10 @@ from logger_ragis.rag_log import RagLog
 
 log = RagLog.get_logger("loaders")
 
-def load_all_documents(base_dir: Path) -> List:
+def load_all_documents(request:Request, base_dir: Path) -> List:
     """Carica tutti i documenti utili alla indicizzazione."""
     docs = []
-    params = request.app_.state.params
+    params = request.app.state.params
     excluded_exts = params["excluded_exts"]
     for path_str in glob.glob(str(base_dir / "**" / "*.*"), recursive=True):
         path = Path(path_str)

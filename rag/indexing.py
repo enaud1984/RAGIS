@@ -1,19 +1,21 @@
 from typing import Dict
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from starlette.requests import Request
 
 from logger_ragis.rag_log import RagLog
+
 from settings import *
 from rag.embeddings import get_vector_db
 from rag.loaders import load_all_documents, get_file_hash
 
 log = RagLog.get_logger("indexing")
 # --------- Indicizzazione incrementale ----------
-def build_vector_db() -> Dict[str, str]:
+def build_vector_db(request:Request) -> Dict[str, str]:
     log.info("Start indicizzazione incrementale...")
-    params = request.app_.state.params
+    params = request.app.state.params
     excluded_exts = params["excluded_exts"]
-    vectordb = get_vector_db()
+    vectordb = get_vector_db(request)
     data_dir = params["data_dir"]
     chunk_overlap=params["chunk_overlap"]
     chunk_size=params["chunk_size"]

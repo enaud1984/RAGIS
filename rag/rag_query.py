@@ -1,6 +1,7 @@
 from typing import Tuple
 
 from langchain_ollama import ChatOllama
+from starlette.requests import Request
 
 from settings import *
 from rag.embeddings import get_vector_db
@@ -8,8 +9,8 @@ from logger_ragis.rag_log import RagLog
 
 log = RagLog.get_logger("rag_query")
 
-def decide_from_db(prompt: str, threshold: float = 0.7, top_k: int = 10) -> Tuple[bool, str]:
-    vectordb = get_vector_db()
+def decide_from_db(request:Request,prompt: str, threshold: float = 0.7, top_k: int = 10) -> Tuple[bool, str]:
+    vectordb = get_vector_db(request)
 
     # 1) Prompt troppo breve → niente RAG
     #if len(prompt.split()) < 4:
@@ -35,15 +36,15 @@ def decide_from_db(prompt: str, threshold: float = 0.7, top_k: int = 10) -> Tupl
     return True, "Match soddisfacenti nei documenti."
 
 
-def query_rag(question: str, top_k: int = None, distance_threshold: float = None,llm_model:str=None) -> Tuple[str, List[Dict[str, str]]]:
+def query_rag(request:Request, question: str, top_k: int = None, distance_threshold: float = None,llm_model:str=None) -> Tuple[str, List[Dict[str, str]]]:
     log.info("Prompt: %s", question)
-    params = request.app_.state.params
+    params = request.app.state.params
 
     top_k = top_k or params["top_k"]
     distance_threshold = distance_threshold or params["distance_threshold"]
     llm_model = llm_model or params["llm_model"]
 
-    vectordb = get_vector_db()
+    vectordb = get_vector_db(request)
     results = vectordb.similarity_search_with_score(question, k=top_k)
     if not results:
         raise RuntimeError("Nessun risultato dalla ricerca vettoriale.")

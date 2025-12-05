@@ -8,7 +8,7 @@ import LoaderBubble from "./LoaderBubble";
 // - invia Authorization header alle chiamate protette
 
 const API_BASE = "http://127.0.0.1:8000";
-// const API_BASE = `http://${window.location.hostname}:3000`;
+// const API_BASE = `http://${window.location.hostname}:8000`;
 
 // Funzione per formattare markdown con grassetto
 function formatMarkdown(text) {

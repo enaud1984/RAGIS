@@ -53,7 +53,7 @@ async def reindex_notturno(app_: FastAPI):
     app_.state.reindexing = True
 
     try:
-        await asyncio.to_thread(build_vector_db)
+        await asyncio.to_thread(build_vector_db,FakeRequest(app_))
         log.info("==> REINDEX COMPLETATO")
     except Exception as e:
         log.exception("Errore nel reindex: %s", e)
@@ -61,6 +61,9 @@ async def reindex_notturno(app_: FastAPI):
         app_.state.reindexing = False
         log.info("==> API RIATTIVATE")
 
+class FakeRequest:
+    def __init__(self, app):
+        self.app = app
 
 @asynccontextmanager
 async def lifespan(app_: FastAPI):
@@ -113,7 +116,7 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
             "testo": "Il sistema sta aggiornando il database. "
                      "Riprova tra qualche minuto."}
     log.info(f"Richiesta chat da utente: {payload.get('username')}, testo: {body.prompt[:50]}...")
-    params = request.app_.state.params
+    params = request.app.state.params
     top_k = body.top_k if body.top_k is not None else params["top_k"]
     distance_threshold = (
         body.distance_threshold
@@ -124,14 +127,14 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
     if not body.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt vuoto")
 
-    match, msg = decide_from_db(body.prompt, threshold=body.distance_threshold or distance_threshold,
+    match, msg = decide_from_db(request,body.prompt, threshold=body.distance_threshold or distance_threshold,
                                 top_k=body.top_k or top_k)
     answer_init=""
     if not match:
         answer_init = "Non ho trovato informazioni rilevanti nei documenti."
 
     try:
-        answer, sources = query_rag(body.prompt, top_k=body.top_k or top_k,
+        answer, sources = query_rag(request,body.prompt, top_k=body.top_k or top_k,
                                     distance_threshold=body.distance_threshold or distance_threshold,
                                     llm_model=body.llm_model or llm_model)
         if not answer:
@@ -146,9 +149,9 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
 
 
 @app.get("/reindex/", tags=["admin"])
-def reindex(payload: dict = Depends(validate_token)):
+def reindex(request:Request,payload: dict = Depends(validate_token)):
     try:
-        result = build_vector_db()
+        result = build_vector_db(request)
         return {"message": result.get("message", "OK")}
     except Exception as e:
         log.exception("Errore indicizzazione")
@@ -156,9 +159,9 @@ def reindex(payload: dict = Depends(validate_token)):
 
 
 @app.get("/debug_db/", )
-def debug_db():
+def debug_db(request:Request):
     try:
-        vectordb = get_vector_db()
+        vectordb = get_vector_db(request)
         all_data = vectordb.get()
         num_docs = len(all_data.get("ids", []))
         sample_meta = all_data.get("metadatas", [])[:5]
@@ -168,8 +171,8 @@ def debug_db():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/get_parameters", tags=["admin"])
-def get_parameters(payload: dict = Depends(validate_token)):
-    return request.app_.state.params
+def get_parameters(request:Request, payload: dict = Depends(validate_token)):
+    return request.app.state.params
 
 
 @app.post("/save_parameters", tags=["admin"])
@@ -184,9 +187,9 @@ def save_parameters(body: dict = Body(...), payload: dict = Depends(validate_tok
         raise HTTPException(status_code=401, detail=str(e))
 
 @app.get("/get_models",tags=["admin"])
-def get_models(payload: dict = Depends(validate_token)):
+def get_models(request:Request,payload: dict = Depends(validate_token)):
     try:
-        parameter=request.app_.state.params
+        parameter=request.app.state.params
         modelli_generici=parameter["Models"]
         resp = requests.get("http://localhost:11434/api/tags")
         resp.raise_for_status()
@@ -382,7 +385,7 @@ def cancella_utente(user_id: int, payload: dict = Depends(validate_token)):
 @app.post("/upload/", tags=["admin"])
 def upload_files(request: Request, files: list[UploadFile] = File(...), payload: dict = Depends(validate_token)):
     saved_files = []
-    params = request.app_.state.params
+    params = request.app.state.params
     data_dir = params["data_dir"]
     if request.app.state.reindexing:
         return {
