@@ -1,3 +1,6 @@
+from database.connection import DBConnection
+
+
 class ParameterDB:
     def __init__(self):
         self.db = DBConnection()
