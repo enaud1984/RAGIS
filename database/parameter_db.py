@@ -13,8 +13,7 @@ class ParameterDB:
         except Exception as e:
             print(f"Errore nel recuperare parametro {name}: {e}")
             return default
-        finally:
-            self.db.close()
+
 
     def set(self, nome, valore, tipo="stringa", descrizione=None):
         try:
@@ -30,5 +29,3 @@ class ParameterDB:
             self.conn.commit()
         except Exception as e:
             print(f"Errore nel settare parametro {nome}: {e}")
-        finally:
-            self.db.close()
