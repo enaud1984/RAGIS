@@ -2,21 +2,22 @@ from database.connection import DBConnection
 
 
 class ParameterDB:
-    def __init__(self):
-        self.db = DBConnection()
-        self.conn = self.db.conn
 
     def get(self, name, default=None):
         try:
-            cur = self.conn.execute("SELECT valore FROM parameters WHERE nome=?", (name,))
+            db = DBConnection()
+            conn = db.conn
+            cur = conn.execute("SELECT valore FROM parameters WHERE nome=?", (name,))
             row = cur.fetchone()
             return row[0] if row else default
         finally:
-            self.db.close()
+            db.close()
 
     def set(self, nome, valore, tipo="stringa", descrizione=None):
         try:
-            self.conn.execute("""
+            db = DBConnection()
+            conn = db.conn
+            conn.execute("""
                 INSERT INTO parameters(nome, valore, tipo, descrizione)
                 VALUES (?, ?, ?, ?)
                 ON CONFLICT(nome) DO UPDATE SET 
@@ -25,6 +26,6 @@ class ParameterDB:
                     descrizione=excluded.descrizione,
                     data_aggiornamento=CURRENT_TIMESTAMP
             """, (nome, str(valore), tipo, descrizione))
-            self.conn.commit()
+            conn.commit()
         finally:
-            self.db.close()
+            db.close()
