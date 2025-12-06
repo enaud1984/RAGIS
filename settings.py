@@ -35,7 +35,7 @@ def resolve_params():
     db = ParameterDB()
     params = {}
     # LLM
-    params["llm_model"] = db.get("llm_model", "mistral")
+    params["llm_model"] = db.get("llm_model", "mistral:latest")
     # Embeddings
     params["embed_model"] = db.get("embed_model", "intfloat/e5-large-v2")
     # Chunking
@@ -54,7 +54,7 @@ def resolve_params():
     """data_dir.mkdir(parents=True, exist_ok=True)"""
     params["data_dir"] = data_dir
     params["DIRETTIVA_PROMPT"] = db.get("DIRETTIVA_PROMPT","")    
-    models_str = db.get("Models","phi3:medium, mistral:latest, qwen3-vi:8b, qwen3-vi:4b, qwen3:30b, qwen3:8b, qwen3:4b, gemma:2b")
+    models_str = db.get("Models","mistral:latest, llama3.2:latest, qwen2.5:latest, gemma2:2b, phi3:latest")
     models = [m.strip() for m in models_str.split(",") if m.strip()]
     params["Models"] = models
     return params

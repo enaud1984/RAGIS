@@ -27,7 +27,7 @@ def build_vector_db(request:Request) -> Dict[str, str]:
         existing = {}
     existing_hashes = set(m.get("hash") for m in existing.get("metadatas", []) if m.get("hash"))
 
-    all_docs = load_all_documents(data_dir)
+    all_docs = load_all_documents(request, data_dir)
     valid_docs = [d for d in all_docs if not d.metadata.get("source", "").lower().endswith(excluded_exts)]
     new_docs = []
     for doc in valid_docs:

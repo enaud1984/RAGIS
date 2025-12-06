@@ -7,8 +7,8 @@ import LoaderBubble from "./LoaderBubble";
 // - salva token/ruolo in localStorage
 // - invia Authorization header alle chiamate protette
 
-const API_BASE = "http://127.0.0.1:8000";
-// const API_BASE = `http://${window.location.hostname}:8000`;
+//const API_BASE = "http://127.0.0.1:8000";
+ const API_BASE = `http://${window.location.hostname}:8000`;
 
 // Funzione per formattare markdown con grassetto
 function formatMarkdown(text) {
@@ -121,7 +121,7 @@ function App() {
   const [reindexing, setReindexing] = useState(false);
   const [showParamsPanel, setShowParamsPanel] = useState(false);
   const [modelParams, setModelParams] = useState({
-    llm_model: "mistral",
+    llm_model: "mistral:latest",
     embed_model: "intfloat/e5-large-v2",
     chunk_size: "1500",
     chunk_overlap: "200",
@@ -135,7 +135,7 @@ function App() {
 
   // Valori di default hardcoded per il reset
   const HARDCODED_DEFAULTS = {
-    llm_model: "mistral",
+    llm_model: "mistral:latest",
     embed_model: "intfloat/e5-large-v2",
     chunk_size: "1500",
     chunk_overlap: "200",
@@ -145,6 +145,8 @@ function App() {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const textareaRef = useRef(null);
+  const chatMessagesRef = useRef(null);
+  const [shouldSaveChat, setShouldSaveChat] = useState(false);
 
   // State per il form di creazione utenti (solo admin)
   const [showNewUserForm, setShowNewUserForm] = useState(false);
@@ -188,6 +190,14 @@ function App() {
     }
   }, [user, showParamsPanel]);
 
+  // Carica i parametri del modello per tutti gli utenti all'avvio
+  useEffect(() => {
+    if (user && user.token) {
+      loadCurrentParams();
+      loadLlmModels(); // Carica anche la lista dei modelli
+    }
+  }, [user]);
+
   // Carica cronologia chat dal localStorage
   useEffect(() => {
     const loadChatHistory = () => {
@@ -204,6 +214,62 @@ function App() {
     };
     loadChatHistory();
   }, []);
+
+  // Salva automaticamente la chat quando i messaggi cambiano E shouldSaveChat è true
+  useEffect(() => {
+    if (chatMessages.length > 0 && !isLoading && shouldSaveChat) {
+      const timer = setTimeout(() => {
+        // Salva la chat corrente
+        const firstUserMessage = chatMessages.find(msg => msg.sender === "utente");
+        const preview = firstUserMessage 
+          ? firstUserMessage.text.substring(0, 50) + (firstUserMessage.text.length > 50 ? '...' : '')
+          : 'Chat senza messaggi';
+        
+        const chatToSave = {
+          id: currentChatId,
+          timestamp: Date.now(), // Aggiorna sempre il timestamp ad ora
+          preview: preview,
+          messages: chatMessages
+        };
+        
+        // Carica la cronologia corrente dal localStorage
+        const stored = localStorage.getItem('chatHistory');
+        const currentHistory = stored ? JSON.parse(stored) : [];
+        
+        // Controlla se questa chat esiste già
+        const existingIndex = currentHistory.findIndex(chat => chat.id === currentChatId);
+        let updatedHistory;
+        
+        if (existingIndex >= 0) {
+          // Aggiorna la chat esistente
+          updatedHistory = [...currentHistory];
+          updatedHistory[existingIndex] = chatToSave;
+        } else {
+          // Aggiungi nuova chat
+          updatedHistory = [chatToSave, ...currentHistory].slice(0, 20); // Max 20 chat
+        }
+        
+        // Salva nel localStorage e aggiorna lo stato
+        localStorage.setItem('chatHistory', JSON.stringify(updatedHistory));
+        setChatHistory(updatedHistory);
+        setShouldSaveChat(false); // Reset flag
+      }, 500); // Debounce di 500ms per evitare troppi salvataggi
+      
+      return () => clearTimeout(timer);
+    }
+  }, [chatMessages, isLoading, currentChatId, shouldSaveChat]);
+
+  // Scroll automatico verso il basso quando i messaggi cambiano
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      // Usa setTimeout per assicurarsi che il DOM sia aggiornato
+      setTimeout(() => {
+        if (chatMessagesRef.current) {
+          chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+        }
+      }, 100);
+    }
+  }, [chatMessages]);
 
   const loadCurrentParams = async () => {
     try {
@@ -244,7 +310,7 @@ function App() {
     } catch (err) {
       console.error("Errore caricamento modelli LLM:", err);
       // Fallback a lista base in caso di errore
-      setLlmModels(["mistral", "qwen3-vi:8b", "gemma:2b"]);
+      setLlmModels(["mistral:latest", "qwen2.5:latest", "gemma2:2b"]);
     }
   };
 
@@ -313,7 +379,7 @@ function App() {
           const next = [
             ...prev,
             { sender: "utente", text: currentPrompt },
-            { sender: "RAG", text: "", loading: true },
+            { sender: "RAGIS", text: "", loading: true },
           ];
           placeholderIndex = next.length - 1; // indice del placeholder appena aggiunto
           return next;
@@ -338,31 +404,32 @@ function App() {
           let idx = placeholderIndex;
           if (idx < 0 || !next[idx]?.loading) {
             for (let i = next.length - 1; i >= 0; i--) {
-              if (next[i].sender === "RAG" && next[i].loading) {
+              if (next[i].sender === "RAGIS" && next[i].loading) {
                 idx = i;
                 break;
               }
             }
           }
           if (idx >= 0) {
-            next[idx] = { sender: "RAG", text: data.answer || "Errore nella risposta", loading: false };
+            next[idx] = { sender: "RAGIS", text: data.answer || "Errore nella risposta", loading: false };
           } else {
             // fallback: aggiungi risposta in coda
-            next.push({ sender: "RAG", text: data.answer || "Errore nella risposta", loading: false });
+            next.push({ sender: "RAGIS", text: data.answer || "Errore nella risposta", loading: false });
           }
           
           return next;
         });
         setStatusMessage("Risposta ricevuta.");
         setIsLoading(false);
+        setShouldSaveChat(true); // Attiva il salvataggio
       } catch (error) {
         console.error("Errore:", error);
         // In caso di errore, sostituisci l'eventuale placeholder con errore
         setChatMessages((prev) => {
           const next = [...prev];
           for (let i = next.length - 1; i >= 0; i--) {
-            if (next[i].sender === "RAG" && next[i].loading) {
-              next[i] = { sender: "RAG", text: "Errore nella richiesta.", loading: false };
+            if (next[i].sender === "RAGIS" && next[i].loading) {
+              next[i] = { sender: "RAGIS", text: "Errore nella richiesta.", loading: false };
               return next;
             }
           }
@@ -524,8 +591,48 @@ function App() {
   };
 
   const loadChatFromHistory = (chat) => {
+    setShouldSaveChat(false); // Impedisci il salvataggio quando si carica una chat
     setChatMessages(chat.messages);
     setCurrentChatId(chat.id);
+    // Scroll dopo il caricamento
+    setTimeout(() => {
+      if (chatMessagesRef.current) {
+        chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+      }
+    }, 150);
+  };
+
+  const saveChatToHistory = () => {
+    // Salva la chat corrente senza reset (per aggiornamenti incrementali)
+    if (chatMessages.length > 0) {
+      const firstUserMessage = chatMessages.find(msg => msg.sender === "utente");
+      const preview = firstUserMessage 
+        ? firstUserMessage.text.substring(0, 50) + (firstUserMessage.text.length > 50 ? '...' : '')
+        : 'Chat senza messaggi';
+      
+      const chatToSave = {
+        id: currentChatId,
+        timestamp: currentChatId,
+        preview: preview,
+        messages: chatMessages
+      };
+      
+      // Controlla se questa chat esiste già
+      const existingIndex = chatHistory.findIndex(chat => chat.id === currentChatId);
+      let updatedHistory;
+      
+      if (existingIndex >= 0) {
+        // Aggiorna la chat esistente
+        updatedHistory = [...chatHistory];
+        updatedHistory[existingIndex] = chatToSave;
+      } else {
+        // Aggiungi nuova chat
+        updatedHistory = [chatToSave, ...chatHistory].slice(0, 20); // Max 20 chat
+      }
+      
+      setChatHistory(updatedHistory);
+      localStorage.setItem('chatHistory', JSON.stringify(updatedHistory));
+    }
   };
 
   const saveCurrentChatAndReset = () => {
@@ -576,9 +683,11 @@ function App() {
     const date = new Date(timestamp);
     const now = new Date();
     const diff = now - date;
+    const minutes = Math.floor(diff / (1000 * 60));
     const hours = Math.floor(diff / (1000 * 60 * 60));
     
-    if (hours < 1) return 'Pochi minuti fa';
+    if (minutes < 5) return 'Pochi minuti fa';
+    if (minutes < 60) return `${minutes} minuti fa`;
     if (hours < 24) return `${hours}h fa`;
     return `${Math.floor(hours / 24)}g fa`;
   };
@@ -878,7 +987,9 @@ function App() {
               {chatHistory.length === 0 ? (
                 <div className="no-history">Nessuna chat salvata</div>
               ) : (
-                chatHistory.map((chat) => (
+                [...chatHistory]
+                  .sort((a, b) => b.timestamp - a.timestamp) // Ordina per timestamp decrescente
+                  .map((chat) => (
                   <div key={chat.id} className="chat-history-item">
                     <div className="chat-preview" onClick={() => loadChatFromHistory(chat)}>
                       <div className="chat-text">{chat.preview}</div>
@@ -947,7 +1058,7 @@ function App() {
                 <polyline points="16 17 21 12 16 7"></polyline>
                 <line x1="21" y1="12" x2="9" y2="12"></line>
               </svg>
-              Logout
+              <span className="logout-text">Logout</span>
             </button>
           )}
         </div>
@@ -1020,7 +1131,7 @@ function App() {
                         })
                       ) : (
                         <div className="custom-select-option" onClick={() => setShowModelDropdown(false)}>
-                          <span className="model-name">mistral</span>
+                          <span className="model-name">mistral:latest</span>
                         </div>
                       )}
                     </div>
@@ -1060,8 +1171,8 @@ function App() {
 
       {/* Form creazione nuovo utente (solo per admin, visibile quando showNewUserForm è true) */}
       {user && user.isAdmin && showNewUserForm && (
-        <div className="overlay">
-          <div className="dialog new-user-dialog">
+        <div className="overlay" onClick={() => setShowNewUserForm(false)}>
+          <div className="dialog new-user-dialog" onClick={(e) => e.stopPropagation()}>
             <h3>Crea nuovo utente</h3>
             <form onSubmit={handleCreateUser}>
               <input
@@ -1218,7 +1329,7 @@ function App() {
       )}
 
       {/* Main */}
-      <main className="main">
+      <main className="main" ref={chatMessagesRef}>
         {/* Pulsante hamburger per mobile */}
         {!sidebarOpen && (
           <button className="hamburger-btn" onClick={() => setSidebarOpen(true)}>
@@ -1229,6 +1340,19 @@ function App() {
             </svg>
           </button>
         )}
+        
+        {/* Header con modello LLM */}
+        <div className="chat-header">
+          <div className="model-indicator">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+              <line x1="12" y1="22.08" x2="12" y2="12"></line>
+            </svg>
+            <span className="model-name">{modelParams.llm_model || "mistral"}</span>
+          </div>
+        </div>
+        
         <div className="chat-area">
           <div className="chat">
             <div className="chat-messages">
@@ -1240,7 +1364,7 @@ function App() {
                   <strong>{msg.sender}:</strong>{" "}
                   {msg.loading ? (
                     <LoaderBubble />
-                  ) : msg.sender === "RAG" ? (
+                  ) : msg.sender === "RAGIS" ? (
                     <span dangerouslySetInnerHTML={{ __html: formatMarkdown(msg.text) }} />
                   ) : (
                     msg.text
@@ -1312,8 +1436,9 @@ function App() {
               }}
               placeholder="Scrivi il tuo messaggio..."
               rows={1}
+              disabled={isLoading}
             />
-            <button className="icon-button send" onClick={handleSendPrompt}>
+            <button className="icon-button send" onClick={handleSendPrompt} disabled={isLoading}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12"></line>
                 <polyline points="12 5 19 12 12 19"></polyline>
