@@ -132,6 +132,7 @@ function App() {
   const [llmModels, setLlmModels] = useState([]);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [downloadingModel, setDownloadingModel] = useState(false);
+   const abortControllerRef = useRef(null);
 
   // Valori di default hardcoded per il reset
   const HARDCODED_DEFAULTS = {
@@ -359,8 +360,8 @@ function App() {
     const { name, checked } = e.target;
     setSearchMode((prev) => ({ ...prev, [name]: checked }));
   };
-
-  const handleSendPrompt = async () => {
+  /*CHAT_NO_STREAM*/
+  /*const handleSendPrompt = async () => {
     if (reindexing) {
       setStatusMessage("Attendere: reindicizzazione in corso...");
       return;
@@ -439,7 +440,117 @@ function App() {
         setIsLoading(false);
       }
     }
-  };
+  };*/
+
+  /*CHAT_STREAM*/
+  const handleSendPrompt = async () => {
+  if (reindexing || isLoading) return;
+  if (!promptUtente.trim()) return;
+
+  const currentPrompt = promptUtente;
+  setPromptUtente("");
+  setShowSuggestions(false);
+  setIsLoading(true);
+
+  // Messaggio utente + placeholder RAGIS
+  let ragIndex;
+  setChatMessages(prev => {
+    const next = [
+      ...prev,
+      { sender: "utente", text: currentPrompt },
+      { sender: "RAGIS", text: "", loading: true }
+    ];
+    ragIndex = next.length - 1;
+    return next;
+  });
+
+  const controller = new AbortController();
+  abortControllerRef.current = controller;
+
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (user?.token) headers["Authorization"] = `Bearer ${user.token}`;
+
+    const response = await fetch(`${API_BASE}/chat/stream`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ prompt: currentPrompt }),
+      signal: controller.signal
+    });
+
+    if (!response.body) {
+      throw new Error("Streaming non supportato dal browser");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      fullText += chunk;
+
+      setChatMessages(prev => {
+        const next = [...prev];
+        next[ragIndex] = {
+          sender: "RAGIS",
+          text: fullText,
+          loading: true
+        };
+        return next;
+      });
+    }
+
+    // Fine stream
+    setChatMessages(prev => {
+      const next = [...prev];
+      next[ragIndex] = {
+        sender: "RAGIS",
+        text: fullText,
+        loading: false
+      };
+      return next;
+    });
+
+    setShouldSaveChat(true);
+
+  } catch (err) {
+  if (err.name === "AbortError") {
+    // ⏹ STOP premuto
+    setChatMessages(prev => {
+      const next = [...prev];
+      if (next[ragIndex]) {
+        next[ragIndex] = {
+          ...next[ragIndex],
+          loading: false,
+          text: next[ragIndex].text || "⏹ Risposta interrotta"
+        };
+      }
+      return next;
+    });
+  } else {
+    console.error(err);
+    setChatMessages(prev => {
+      const next = [...prev];
+      if (next[ragIndex]) {
+        next[ragIndex] = {
+          sender: "RAGIS",
+          text: "Errore durante la richiesta.",
+          loading: false
+        };
+      }
+      return next;
+    });
+    }
+   }
+  finally {
+    setIsLoading(false);
+    abortControllerRef.current = null;
+  }
+};
 
   const handleUploadDocument = async (event) => {
     const file = event.target.files[0];
@@ -1438,12 +1549,41 @@ function App() {
               rows={1}
               disabled={isLoading}
             />
-            <button className="icon-button send" onClick={handleSendPrompt} disabled={isLoading}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-                <polyline points="12 5 19 12 12 19"></polyline>
-              </svg>
-            </button>
+            {isLoading ? (
+              <button
+                className="icon-button"
+                onClick={() => abortControllerRef.current?.abort()}
+                title="Interrompi risposta"
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                >
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                className="icon-button send"
+                onClick={handleSendPrompt}
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
+            )}
           </div>
           <footer className="footer">AI system rilasciato da RAGIS group</footer>
         </div>

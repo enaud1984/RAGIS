@@ -26,6 +26,7 @@ from fastapi import FastAPI, Body, HTTPException, Request, UploadFile, File, Dep
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import StreamingResponse
 
 from auth import hash_password, verify_password, create_jwt, validate_token
 from database.connection import DBConnection
@@ -33,7 +34,7 @@ from database.migration import run_migrations
 from logger_ragis.rag_log import RagLog
 from rag.embeddings import get_vector_db
 from rag.indexing import build_vector_db
-from rag.rag_query import decide_from_db, query_rag
+from rag.rag_query import decide_from_db, query_rag, query_rag_stream
 from settings import *
 
 log = RagLog.get_logger("Ragis")
@@ -117,6 +118,9 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
                      "Riprova tra qualche minuto."}
     log.info(f"Richiesta chat da utente: {payload.get('username')}, testo: {body.prompt[:50]}...")
     params = request.app.state.params
+    if not body.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt vuoto")
+
     top_k = body.top_k if body.top_k is not None else params["top_k"]
     distance_threshold = (
         body.distance_threshold
@@ -124,8 +128,6 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
         else params["distance_threshold"]
     )
     llm_model = body.llm_model if body.llm_model is not None else params["llm_model"]
-    if not body.prompt.strip():
-        raise HTTPException(status_code=400, detail="Prompt vuoto")
 
     match, msg = decide_from_db(request,body.prompt, threshold=body.distance_threshold or distance_threshold,
                                 top_k=body.top_k or top_k)
@@ -146,6 +148,61 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
     except Exception as e:
         log.exception("Errore query_rag")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/chat/stream", response_model=ChatResponse, tags=["chat_stream"])
+async def chat_stream(request: Request, body: ChatRequest = Body(...), payload: dict = Depends(validate_token)):
+    if request.app.state.reindexing:
+        async def blocked():
+            yield "Sistema in aggiornamento. Riprova più tardi."
+        return StreamingResponse(blocked(), media_type="text/plain")
+
+    log.info(f"Richiesta chat da utente: {payload.get('username')}, testo: {body.prompt[:50]}...")
+    params = request.app.state.params
+    if not body.prompt.strip():
+        async def empty():
+            yield "Prompt vuoto."
+        return StreamingResponse(empty(), media_type="text/plain")
+    top_k = body.top_k if body.top_k is not None else params["top_k"]
+    distance_threshold = (
+        body.distance_threshold
+        if body.distance_threshold is not None
+        else params["distance_threshold"]
+    )
+    llm_model = body.llm_model if body.llm_model is not None else params["llm_model"]
+
+    match, msg = decide_from_db(request,body.prompt, threshold=body.distance_threshold or distance_threshold,
+                                top_k=body.top_k or top_k)
+    answer_init=""
+    if not match:
+        answer_init = "Non ho trovato informazioni rilevanti nei documenti."
+
+    async def event_generator():
+        try:
+            # Prefisso risposta (se serve)
+            if answer_init:
+                yield answer_init
+
+            async for chunk in query_rag_stream(
+                request,
+                question=body.prompt,
+                top_k=top_k,
+                distance_threshold=distance_threshold,
+                llm_model=llm_model,
+            ):
+                yield chunk
+
+        except asyncio.CancelledError:
+            log.info("Stream interrotto dall'utente (STOP)")
+            return
+
+        except Exception as e:
+            log.exception("Errore query_rag_stream")
+            yield f"\nErrore durante la generazione della risposta: {e}"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/plain; charset=utf-8",
+    )
 
 
 @app.get("/reindex/", tags=["admin"])
