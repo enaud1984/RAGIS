@@ -498,7 +498,7 @@ function App() {
         next[ragIndex] = {
           sender: "RAGIS",
           text: fullText,
-          loading: true
+          loading: false
         };
         return next;
       });
