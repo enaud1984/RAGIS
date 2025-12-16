@@ -8,10 +8,11 @@ from logger_ragis.rag_log import RagLog
 from settings import *
 from rag.embeddings import get_vector_db
 from rag.loaders import load_all_documents, get_file_hash
+from rag.dynamic_chunking import create_db_with_dynamic_chunking, ChunkingConfig
 
 log = RagLog.get_logger("indexing")
 # --------- Indicizzazione incrementale ----------
-def build_vector_db(request:Request) -> Dict[str, str]:
+def build_vector_db(request: Request, use_dynamic_chunking: bool = True) -> Dict[str, str]:
     log.info("Start indicizzazione incrementale...")
     params = request.app.state.params
     excluded_exts = params["excluded_exts"]
@@ -43,9 +44,8 @@ def build_vector_db(request:Request) -> Dict[str, str]:
     if not new_docs:
         log.info("Nessun nuovo documento da indicizzare.")
         return {"message": "Nessun nuovo documento."}
-    log.info("RICOSTRUISCO IL DB VETTORIALE CON %d DOCUMENTI NUOVI", len(new_docs))
-    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    chunks = splitter.split_documents(new_docs)
+
+    chunks = chunking(use_dynamic_chunking,new_docs,chunk_size,chunk_overlap)
 
     ids = []
     for i, c in enumerate(chunks):
@@ -68,3 +68,34 @@ def build_vector_db(request:Request) -> Dict[str, str]:
     log.info(msg)
     return {"message": msg}
 
+def chunking(use_dynamic_chunking: bool,new_docs,chunk_size,chunk_overlap):
+    log.info("INDICIZZAZIONE CON %d DOCUMENTI NUOVI (strategia: %s)",
+             len(new_docs),
+             "DYNAMIC" if use_dynamic_chunking else "STATIC")
+
+    # ===== SCELTA DELLA STRATEGIA DI CHUNKING =====
+    try:
+        if use_dynamic_chunking:
+            chunks = create_db_with_dynamic_chunking(
+                new_docs,
+                config=ChunkingConfig(
+                    min_chunk_tokens=100,
+                    max_chunk_tokens=600,
+                    respect_structure=True,
+                    merge_small_chunks=True
+                )
+            )
+            log.info("Chunking dinamico completato: %d chunk generati", len(chunks))
+
+        else:
+            # Fallback statico (vecchio metodo)
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap
+            )
+            chunks = splitter.split_documents(new_docs)
+            log.info("Chunking statico (ricorsivo) completato: %d chunk", len(chunks))
+        return chunks
+    except Exception as e:
+        log.error(f"Errore durante il chunking: {e}")
+        return None
