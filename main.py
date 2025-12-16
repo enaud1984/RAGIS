@@ -19,6 +19,7 @@ import asyncio
 import shutil
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 import requests
 
 import aiocron
@@ -26,6 +27,7 @@ from fastapi import FastAPI, Body, HTTPException, Request, UploadFile, File, Dep
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import StreamingResponse
 
 from auth import hash_password, verify_password, create_jwt, validate_token
 from database.connection import DBConnection
@@ -33,7 +35,8 @@ from database.migration import run_migrations
 from logger_ragis.rag_log import RagLog
 from rag.embeddings import get_vector_db
 from rag.indexing import build_vector_db
-from rag.rag_query import decide_from_db, query_rag
+from rag.ingestion import ingest_documents
+from rag.rag_query import decide_from_db, query_rag, query_rag_stream
 from settings import *
 
 log = RagLog.get_logger("Ragis")
@@ -53,8 +56,9 @@ async def reindex_notturno(app_: FastAPI):
     app_.state.reindexing = True
 
     try:
-        await asyncio.to_thread(build_vector_db,FakeRequest(app_))
-        log.info("==> REINDEX COMPLETATO")
+        # Usa chunking dinamico (default=True) per migliore qualità dei chunk
+        await asyncio.to_thread(build_vector_db, FakeRequest(app_), use_dynamic_chunking=True)
+        log.info("==> REINDEX COMPLETATO CON CHUNKING DINAMICO")
     except Exception as e:
         log.exception("Errore nel reindex: %s", e)
     finally:
@@ -73,6 +77,29 @@ async def lifespan(app_: FastAPI):
     await asyncio.to_thread(run_migrations)
 
     app_.state.params = resolve_params()
+    
+    # === INGESTION AL STARTUP ===
+    log.info("==> INIZIO INGESTION AL STARTUP")
+    try:
+        ingest_result = await asyncio.to_thread(
+            ingest_documents,
+            source_dir=Path("Documenti"),
+            ingested_dir=Path("Documenti_ingested"),
+            deterministic=True
+        )
+        log.info(f"Ingestion completata: {ingest_result['files_ingested']} file ingesti, "
+                f"{ingest_result['files_skipped']} skipped")
+    except Exception as e:
+        log.exception(f"Errore ingestion startup: {e}")
+    
+    # === BUILD VETTORIALE INIZIALE ===
+    log.info("==> INIZIO BUILD DATABASE VETTORIALE (CHUNKING DINAMICO)")
+    try:
+        await asyncio.to_thread(build_vector_db, FakeRequest(app_), use_dynamic_chunking=True)
+        log.info("==> BUILD DATABASE VETTORIALE COMPLETATO")
+    except Exception as e:
+        log.exception(f"Errore build database vettoriale: {e}")
+    
     # Salvi il job nella app state
     cron_reindex = app_.state.params["cron_reindex"]
     cron_job = aiocron.crontab(cron_reindex, func=reindex_notturno, args=(app_,))
@@ -117,6 +144,9 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
                      "Riprova tra qualche minuto."}
     log.info(f"Richiesta chat da utente: {payload.get('username')}, testo: {body.prompt[:50]}...")
     params = request.app.state.params
+    if not body.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt vuoto")
+
     top_k = body.top_k if body.top_k is not None else params["top_k"]
     distance_threshold = (
         body.distance_threshold
@@ -124,8 +154,6 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
         else params["distance_threshold"]
     )
     llm_model = body.llm_model if body.llm_model is not None else params["llm_model"]
-    if not body.prompt.strip():
-        raise HTTPException(status_code=400, detail="Prompt vuoto")
 
     match, msg = decide_from_db(request,body.prompt, threshold=body.distance_threshold or distance_threshold,
                                 top_k=body.top_k or top_k)
@@ -147,12 +175,68 @@ async def chat(request: Request, body: ChatRequest = Body(...), payload: dict = 
         log.exception("Errore query_rag")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/chat/stream", response_model=ChatResponse, tags=["chat_stream"])
+async def chat_stream(request: Request, body: ChatRequest = Body(...), payload: dict = Depends(validate_token)):
+    if request.app.state.reindexing:
+        async def blocked():
+            yield "Sistema in aggiornamento. Riprova più tardi."
+        return StreamingResponse(blocked(), media_type="text/plain")
+
+    log.info(f"Richiesta chat da utente: {payload.get('username')}, testo: {body.prompt[:50]}...")
+    params = request.app.state.params
+    if not body.prompt.strip():
+        async def empty():
+            yield "Prompt vuoto."
+        return StreamingResponse(empty(), media_type="text/plain")
+    top_k = body.top_k if body.top_k is not None else params["top_k"]
+    distance_threshold = (
+        body.distance_threshold
+        if body.distance_threshold is not None
+        else params["distance_threshold"]
+    )
+    llm_model = body.llm_model if body.llm_model is not None else params["llm_model"]
+
+    match, msg = decide_from_db(request,body.prompt, threshold=body.distance_threshold or distance_threshold,
+                                top_k=body.top_k or top_k)
+    answer_init=""
+    if not match:
+        answer_init = "Non ho trovato informazioni rilevanti nei documenti."
+
+    async def event_generator():
+        try:
+            # Prefisso risposta (se serve)
+            if answer_init:
+                yield answer_init
+
+            async for chunk in query_rag_stream(
+                request,
+                question=body.prompt,
+                top_k=top_k,
+                distance_threshold=distance_threshold,
+                llm_model=llm_model,
+            ):
+                yield chunk
+
+        except asyncio.CancelledError:
+            log.info("Stream interrotto dall'utente (STOP)")
+            return
+
+        except Exception as e:
+            log.exception("Errore query_rag_stream")
+            yield f"\nErrore durante la generazione della risposta: {e}"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/plain; charset=utf-8",
+    )
+
 
 @app.get("/reindex/", tags=["admin"])
-def reindex(request:Request,payload: dict = Depends(validate_token)):
+def reindex(request: Request, payload: dict = Depends(validate_token)):
     try:
-        result = build_vector_db(request)
-        return {"message": result.get("message", "OK")}
+        # Usa chunking dinamico (default=True per migliore qualità)
+        result = build_vector_db(request, use_dynamic_chunking=True)
+        return {"message": result.get("message", "OK"), "strategy": "dynamic_chunking"}
     except Exception as e:
         log.exception("Errore indicizzazione")
         raise HTTPException(status_code=500, detail=str(e))
@@ -381,6 +465,62 @@ def cancella_utente(user_id: int, payload: dict = Depends(validate_token)):
         raise HTTPException(status_code=500, detail="Errore durante cancellazione utente")
     finally:
         conn.close()
+
+@app.post("/ingest/", tags=["admin"])
+def ingest(request: Request, payload: dict = Depends(validate_token)):
+    """
+    Ingestion Layer - Normalizza, valida, deduplica documenti.
+    
+    Processi:
+    - Normalizzazione nomi file
+    - Validazione 6-point check (esistenza, hidden, formato, size, vuoto, encoding)
+    - Deduplicazione content-based (SHA256)
+    - Organizzazione (by_format/, by_date/)
+    - Generazione manifest.jsonl + metadata.json
+    
+    Output:
+    - Documenti_ingested/ (normalizzato)
+    - manifest.jsonl (14 campi per file)
+    - metadata.json (statistiche)
+    """
+    if request.app.state.reindexing:
+        return {
+            "success": False,
+            "message": "Il sistema sta eseguendo reindex. Riprova tra qualche minuto."
+        }
+    
+    try:
+        params = request.app.state.params
+        source_dir = params.get("data_dir", "Documenti")
+        ingested_dir = "Documenti_ingested"
+        
+        log.info(f"Inizio ingestion: {source_dir} → {ingested_dir}")
+        
+        result = ingest_documents(
+            source_dir=source_dir,
+            ingested_dir=ingested_dir,
+            deterministic=True
+        )
+        
+        log.info(f"Ingestion completata: {result['files_ingested']} file ingested, "
+                f"{result['files_skipped']} skipped, {result['files_corrupted']} corrupted")
+        
+        return {
+            "success": result.get("success", True),
+            "total_files_found": result.get("total_files_found", 0),
+            "files_ingested": result.get("files_ingested", 0),
+            "files_skipped": result.get("files_skipped", 0),
+            "files_corrupted": result.get("files_corrupted", 0),
+            "manifest_path": result.get("manifest_path", ""),
+            "metadata_path": result.get("metadata_path", ""),
+            "summary": result.get("summary", {})
+        }
+    except Exception as e:
+        log.exception(f"Errore ingestion: {e}")
+        return {
+            "success": False,
+            "message": f"Errore durante ingestion: {str(e)}"
+        }
 
 @app.post("/upload/", tags=["admin"])
 def upload_files(request: Request, files: list[UploadFile] = File(...), payload: dict = Depends(validate_token)):
